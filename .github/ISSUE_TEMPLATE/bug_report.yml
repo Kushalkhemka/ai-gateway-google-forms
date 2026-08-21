@@ -1,0 +1,59 @@
+name: Bug report
+description: Report a reproducible problem with extraction, AI output, or autofill.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Never include API keys, private form URLs, account details, or real form responses."
+  - type: input
+    id: version
+    attributes:
+      label: Extension version
+      placeholder: "1.0.3"
+    validations:
+      required: true
+  - type: dropdown
+    id: field
+    attributes:
+      label: Question type
+      options:
+        - Short answer
+        - Paragraph
+        - Multiple choice
+        - Checkboxes
+        - Dropdown
+        - Grid or scale
+        - Image-based
+        - Keyboard shortcut
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Use a sanitized practice form or describe its structure.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Preflight checks
+      options:
+        - label: I reloaded the extension and refreshed the form tab.
+          required: true
+        - label: I removed secrets and private data from this report.
+          required: true

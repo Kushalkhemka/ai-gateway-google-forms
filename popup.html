@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Gateway</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="mark"><img src="icons/icon48.png" alt="" /></div>
+        <div>
+          <h1>AI Gateway</h1>
+          <p>Google Forms autofill</p>
+        </div>
+      </header>
+
+      <section class="card">
+        <div class="status-row">
+          <span id="dot" class="dot"></span>
+          <span id="status">Checking this page…</span>
+        </div>
+        <button id="autofill" type="button" disabled>
+          <span id="buttonText">Autofill form</span>
+          <span id="spinner" class="spinner" hidden></span>
+        </button>
+        <p class="note"><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd> · never submits</p>
+      </section>
+
+      <footer>
+        <button id="settings" class="link" type="button">Settings</button>
+        <span id="model">google/gemini-3.7-flash</span>
+      </footer>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

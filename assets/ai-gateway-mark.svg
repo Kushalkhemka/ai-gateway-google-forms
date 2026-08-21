@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">AI Gateway logo</title>
+  <desc id="desc">An original monochrome gateway symbol formed by connected paths and nodes.</desc>
+  <rect width="256" height="256" rx="56" fill="#050505"/>
+  <path d="M66 173V91c0-19 15-34 34-34h56c19 0 34 15 34 34v82" fill="none" stroke="#fff" stroke-width="18" stroke-linecap="round"/>
+  <path d="M94 173v-48c0-10 8-18 18-18h32c10 0 18 8 18 18v48" fill="none" stroke="#fff" stroke-width="18" stroke-linecap="round"/>
+  <path d="M52 173h152" fill="none" stroke="#fff" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="66" cy="91" r="10" fill="#050505" stroke="#fff" stroke-width="8"/>
+  <circle cx="190" cy="91" r="10" fill="#050505" stroke="#fff" stroke-width="8"/>
+  <circle cx="128" cy="107" r="9" fill="#fff"/>
+</svg>

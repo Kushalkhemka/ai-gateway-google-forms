@@ -1,0 +1,9 @@
+{
+  "name": "ai-gateway-google-forms",
+  "version": "1.0.3",
+  "private": true,
+  "description": "Google Forms practice-test autofill Chrome extension",
+  "scripts": {
+    "test": "node tests/selftest.mjs"
+  }
+}
