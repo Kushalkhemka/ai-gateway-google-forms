@@ -1,12 +1,12 @@
 # Contributing
 
-Thanks for helping improve AI Gateway for Google Forms.
+Thanks for helping improve AI Gateway for Google Forms and NPTEL.
 
 ## Before opening an issue
 
 - Reload the unpacked extension from `chrome://extensions`.
-- Refresh the Google Form tab so the latest content script is injected.
-- Confirm the issue occurs in the public/respondent view of a Google Form.
+- Refresh the Google Form or NPTEL tab so the latest content script is injected.
+- Confirm the issue occurs on a supported respondent/assessment page.
 - Remove API keys, account details, form responses, and private form URLs from screenshots and logs.
 
 ## Development workflow
@@ -14,7 +14,7 @@ Thanks for helping improve AI Gateway for Google Forms.
 1. Fork the repository and create a focused branch.
 2. Make the smallest change that solves the issue.
 3. Run `npm test`.
-4. Reload the extension and test against a non-sensitive practice form.
+4. Reload the extension and test against a non-sensitive practice form or assessment.
 5. Open a pull request describing the behavior before and after the change.
 
 ## Pull request checklist

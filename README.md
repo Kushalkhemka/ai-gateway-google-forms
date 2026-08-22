@@ -1,12 +1,13 @@
 <div align="center">
   <img src="assets/ai-gateway-mark.svg" width="112" alt="AI Gateway logo" />
-  <h1>AI Gateway for Google Forms</h1>
-  <p><strong>One prompt. Every question. A fully filled Google Form.</strong></p>
-  <p>A privacy-conscious Chrome extension that understands complete Google Forms—including images and grids—and fills practice quizzes with multimodal AI.</p>
+  <h1>AI Gateway for Google Forms &amp; NPTEL</h1>
+  <p><strong>One prompt. Every question. A review-ready assessment.</strong></p>
+  <p>A privacy-conscious Chrome extension that understands complete Google Forms and NPTEL assessments—including images, grids, subjective answers, and programming problems.</p>
   <p>
     <img alt="Manifest V3" src="https://img.shields.io/badge/Manifest-V3-111111?style=flat-square&amp;logo=googlechrome&amp;logoColor=white" />
     <img alt="JavaScript" src="https://img.shields.io/badge/JavaScript-Vanilla-111111?style=flat-square&amp;logo=javascript&amp;logoColor=white" />
     <img alt="Vercel AI Gateway" src="https://img.shields.io/badge/AI%20Gateway-Vercel-111111?style=flat-square&amp;logo=vercel&amp;logoColor=white" />
+    <img alt="NPTEL" src="https://img.shields.io/badge/Platform-NPTEL-111111?style=flat-square&amp;logoColor=white" />
     <img alt="Gemini 3.7 Flash" src="https://img.shields.io/badge/Model-Gemini%203.7%20Flash-111111?style=flat-square&amp;logo=google&amp;logoColor=white" />
   </p>
 </div>
@@ -15,18 +16,25 @@
 
 ## Why AI Gateway?
 
-Most form assistants process one field at a time and lose the context connecting questions, answer choices, grids, and diagrams. AI Gateway takes the opposite approach: it extracts the entire form, builds one structured multimodal request, and applies one validated answer plan back to the page.
+Most assessment assistants process one field at a time and lose the context connecting questions, answer choices, scenarios, code, and diagrams. AI Gateway takes the opposite approach: it extracts the entire supported assessment, builds one structured multimodal request, and applies one validated answer plan back to the page.
 
 - **Whole-form reasoning** — every supported question is included in a single prompt.
 - **Real vision input** — images are downloaded and embedded as inline base64 payloads, so providers never need to crawl Google-hosted URLs.
 - **Exact option matching** — radio, checkbox, dropdown, and grid responses must match labels present in the form.
 - **Humanized writing** — subjective responses are concise, natural, and configurable.
+- **Programming support** — NPTEL problem statements, selected language, starter code, constraints, and samples are solved as one complete source file.
 - **No surprise submission** — answers are filled for review; the extension never presses Submit.
 - **Zero build step** — plain Manifest V3, HTML, CSS, and JavaScript.
 
-## Supported question types
+## Supported platforms and question types
 
-| Google Forms field | Support | Behavior |
+| Platform | Page type | Support |
+|---|---|:---:|
+| Google Forms | Public/respondent forms | ✅ |
+| NPTEL/SWAYAM | MCQ, MSQ, numerical, short answer, essay | ✅ |
+| NPTEL/SWAYAM | Programming assignments with Ace Editor | ✅ |
+
+| Field | Support | Behavior |
 |---|:---:|---|
 | Short answer | ✅ | Direct, natural response |
 | Paragraph | ✅ | Human-sounding long-form response |
@@ -38,16 +46,22 @@ Most form assistants process one field at a time and lose the context connecting
 | Checkbox grid | ✅ | Solves each row independently |
 | Date, time, and number | ✅ | Uses the field's required format |
 | Question/form images | ✅ | Supports multiple images per question |
+| Programming editor | ✅ | Writes complete code in the language selected by NPTEL |
 | File upload | — | Detected and intentionally skipped |
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    A[Google Form] --> B[DOM extractor]
-    B --> C[Structured questions<br/>fields + exact options]
-    B --> D[Inline image encoder<br/>base64 + imageRefs]
+    A[Google Form or NPTEL] --> B[Site adapter]
+    B --> C1[Google Forms extractor]
+    B --> C2[NPTEL assessment extractor]
+    C1 --> C[Structured questions<br/>fields + exact options]
+    C2 --> C
+    C2 --> K[Programming context<br/>language + starter + samples]
+    C --> D[Inline image encoder<br/>base64 + imageRefs]
     C --> E[Vercel AI Gateway]
+    K --> E
     D --> E
     E --> F[Gemini 3.7 Flash]
     F --> G[Strict JSON answer plan]
@@ -56,12 +70,12 @@ flowchart LR
     I --> J[Review filled form]
 ```
 
-1. The content script identifies top-level Google Forms questions and their interactive controls.
+1. The content script selects a dedicated Google Forms or NPTEL adapter.
 2. Every field receives a stable request-local ID. Choice labels are preserved verbatim.
 3. Up to 20 images by default are downloaded, optimized when necessary, and attached inline with exact `imageRefs`.
 4. Vercel AI Gateway sends one structured multimodal request to `google/gemini-3.7-flash` using automatic provider routing.
 5. The response must satisfy a strict JSON schema. Unknown field IDs are discarded.
-6. The extension fills controls with native setters, click events, and input/change events Google Forms understands.
+6. The extension fills native controls and Ace Editor while leaving every submit/compile action to the user.
 
 ## Install locally
 
@@ -78,12 +92,12 @@ flowchart LR
 git clone https://github.com/Kushalkhemka/ai-gateway-google-forms.git
 ```
 
-After pulling an update, click **Reload** on the extension card and refresh any already-open Google Form tabs.
+After pulling an update, click **Reload** on the extension card and refresh any already-open Google Form or NPTEL tabs.
 
 ## Usage
 
-1. Open the respondent view of a Google Form.
-2. Click the **AI Gateway** toolbar icon and select **Autofill form**.
+1. Open a Google Form respondent page or a supported NPTEL assessment.
+2. Click the **AI Gateway** toolbar icon and select **Autofill assessment**.
 3. Or press **Ctrl+Enter** on Windows/Linux and **Command+Enter** or **Control+Enter** on macOS.
 4. Wait for the toolbar icon to return to its normal state.
 5. Review every response before submitting manually.
@@ -111,7 +125,7 @@ The gateway receives:
 - Inline `data:image/...;base64,...` image attachments
 - A strict JSON response schema
 
-No Google Form URL or Google-hosted image URL is sent for the model provider to crawl.
+No assessment URL or externally hosted image URL is sent for the model provider to crawl.
 
 ## Privacy and security
 
@@ -147,7 +161,7 @@ The self-test verifies:
 ```text
 .
 ├── background.js        # Gateway request, schema, image encoding, toolbar state
-├── content.js           # Google Forms extraction, keyboard shortcut, DOM autofill
+├── content.js           # Site adapters, keyboard shortcut, native/Ace autofill
 ├── popup.*              # Compact extension action UI
 ├── options.*            # Local settings UI
 ├── icons/               # Runtime extension icons (Vercel integration)
@@ -165,7 +179,7 @@ The self-test verifies:
 
 ## Scope and responsible use
 
-AI Gateway is designed for practice quizzes, self-study, QA, and form-automation experiments. Do not use it to violate academic-integrity rules, assessment policies, privacy requirements, or the terms of forms you do not own.
+AI Gateway is designed for practice quizzes, self-study, QA, and assessment-automation experiments. Do not use it to violate academic-integrity rules, assessment policies, privacy requirements, or the terms of assessments you do not own.
 
 Model-generated answers can be wrong. Always review the completed form before submitting it.
 
@@ -176,5 +190,5 @@ Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for
 ---
 
 <div align="center">
-  <sub>Built for fast practice, careful review, and a clean Google Forms experience.</sub>
+  <sub>Built for fast practice, careful review, and clean assessment workflows.</sub>
 </div>

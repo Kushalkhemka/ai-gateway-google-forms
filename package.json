@@ -1,8 +1,8 @@
 {
   "name": "ai-gateway-google-forms",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "private": true,
-  "description": "Google Forms practice-test autofill Chrome extension",
+  "description": "Multimodal Google Forms and NPTEL assessment autofill Chrome extension",
   "scripts": {
     "test": "node tests/selftest.mjs"
   }

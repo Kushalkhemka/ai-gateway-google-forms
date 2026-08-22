@@ -6,7 +6,7 @@
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "PING") {
-      sendResponse({ isRespondentView: isRespondentForm() });
+      sendResponse({ isSupportedPage: isSupportedPage(), site: detectSite() });
       return false;
     }
     if (message?.type !== "AUTOFILL_FORM") return false;
@@ -20,7 +20,7 @@
     const modifierPressed = event.ctrlKey || event.metaKey;
     const enterPressed = event.key === "Enter" || event.code === "Enter" || event.code === "NumpadEnter";
     if (!modifierPressed || event.altKey || !enterPressed) return;
-    if (!isRespondentForm()) return;
+    if (!isSupportedPage()) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (runtime.running) return;
@@ -34,13 +34,29 @@
     return location.hostname === "docs.google.com" && location.pathname.includes("/forms/") && !!document.querySelector("form");
   }
 
+  function isNptelAssessment() {
+    return location.hostname === "onlinecourses.nptel.ac.in" &&
+      location.pathname.includes("/e-learning/course/") &&
+      !!document.querySelector("main.practice-questions");
+  }
+
+  function detectSite() {
+    if (isRespondentForm()) return "google_forms";
+    if (isNptelAssessment()) return "nptel";
+    return "unsupported";
+  }
+
+  function isSupportedPage() {
+    return detectSite() !== "unsupported";
+  }
+
   async function runAutofill() {
-    if (runtime.running) throw new Error("AI Gateway is already working on this form.");
+    if (runtime.running) throw new Error("AI Gateway is already working on this assessment.");
     runtime.running = true;
     await setProcessing(true);
     try {
-      const form = await extractForm();
-      if (!form.questions.length) throw new Error("No supported Google Form questions were found.");
+      const form = await extractPage();
+      if (!form.questions.length) throw new Error("No supported assessment questions were found on this page.");
       const response = await chrome.runtime.sendMessage({ type: "SOLVE_FORM", payload: form });
       if (!response?.ok) throw new Error(response?.error || "The AI request failed.");
       const summary = await applyAnswers(response.result.answers);
@@ -51,7 +67,13 @@
     }
   }
 
-  async function extractForm() {
+  async function extractPage() {
+    if (isRespondentForm()) return extractGoogleForm();
+    if (isNptelAssessment()) return extractNptelAssessment();
+    throw new Error("This page is not supported by AI Gateway.");
+  }
+
+  async function extractGoogleForm() {
     runtime.fieldNodes.clear();
     const formElement = document.querySelector("form");
     const title = cleanText(document.querySelector('[role="heading"][aria-level="1"], [role="heading"]')?.textContent) || document.title;
@@ -85,7 +107,173 @@
 
     collectFormLevelImages(formElement, containers, images);
 
-    return { title, description, url: location.href, questions, images };
+    return { site: "google_forms", title, description, url: location.href, questions, images };
+  }
+
+  async function extractNptelAssessment() {
+    runtime.fieldNodes.clear();
+    const root = document.querySelector("main.programming-assessment-main, main.practice-questions");
+    const title = cleanText(document.querySelector(".assessment-header-title")?.textContent) ||
+      cleanText(document.querySelector("main.assessment-main")?.previousElementSibling?.textContent) ||
+      document.title;
+    const description = cleanText([
+      document.querySelector(".assessment-header-due-date-container")?.textContent,
+      document.querySelector(".assessment-header-messages")?.textContent
+    ].filter(Boolean).join(" "));
+    const questions = [];
+    const images = [];
+
+    if (root?.matches("main.programming-assessment-main")) {
+      const question = extractNptelProgrammingQuestion(root, images);
+      if (question) questions.push(question);
+      return { site: "nptel", assessmentType: "programming", title, description, url: location.href, questions, images };
+    }
+
+    let contextIndex = 0;
+    let currentContext = { text: "", imageRefs: [] };
+    const sections = [...root.querySelectorAll("section")].filter(
+      (section) => !section.parentElement?.closest("section")
+    );
+    for (const section of sections) {
+      const answerControls = [...section.querySelectorAll('input:not([type="hidden"]), textarea, select')]
+        .filter((node) => !node.closest(".ace_editor"));
+      if (!answerControls.length) {
+        const contextText = cleanText(section.innerText);
+        if (contextText.length > 20) {
+          contextIndex += 1;
+          currentContext = {
+            text: contextText.slice(0, 12000),
+            imageRefs: collectNptelContextImages(section, `context${contextIndex}`, images)
+          };
+        }
+        continue;
+      }
+
+      const questionId = `nptel_q${questions.length + 1}`;
+      const questionTitle = cleanText(section.querySelector(".question-content")?.innerText) ||
+        cleanText(section.querySelector(".question-row")?.innerText) ||
+        `Question ${questions.length + 1}`;
+      const fields = extractNptelFields(section, questionId, questionTitle);
+      if (!fields.length) continue;
+      const questionImages = collectQuestionImages(section, questionId, images);
+      questions.push({
+        id: questionId,
+        title: questionTitle.replace(/^\d+\.\s*/, ""),
+        description: currentContext.text,
+        required: !answerControls.every((control) => control.disabled),
+        imageRefs: unique([...currentContext.imageRefs, ...questionImages]),
+        fields
+      });
+    }
+
+    return { site: "nptel", assessmentType: "standard", title, description, url: location.href, questions, images };
+  }
+
+  function extractNptelProgrammingQuestion(root, images) {
+    const editor = root.querySelector("#code-editor.ace_editor, .programming-editor-wrapper .ace_editor");
+    if (!editor) return null;
+    const questionId = "nptel_code_q1";
+    const language = cleanText(root.querySelector(".programming-dropdown-button")?.textContent) || "language selected on page";
+    const title = cleanText(root.querySelector(".programming-question-text")?.innerText) || "Programming assignment";
+    const samples = cleanText(root.querySelector(".programming-test-cases")?.innerText);
+    const instructions = cleanText(root.querySelector(".programming-info-box")?.innerText);
+    const starterCode = readAceText(editor);
+    const field = registerField(questionId, 0, {
+      type: "code",
+      label: `Complete ${language} solution`,
+      language,
+      starterCode,
+      format: "Return one complete source file as plain code only, without Markdown fences or explanation.",
+      allowedOptions: []
+    }, { type: "ace", root: editor });
+    return {
+      id: questionId,
+      title,
+      description: cleanText([instructions, samples].filter(Boolean).join(" ")).slice(0, 12000),
+      required: !editor.querySelector("textarea.ace_text-input")?.readOnly,
+      imageRefs: collectQuestionImages(root, questionId, images),
+      fields: [field]
+    };
+  }
+
+  function extractNptelFields(section, questionId, questionTitle) {
+    const fields = [];
+    const radios = [...section.querySelectorAll('input[type="radio"]')];
+    if (radios.length) {
+      const labels = radios.map((input) => input.closest("label") || input);
+      fields.push(registerField(questionId, fields.length, {
+        type: "radio",
+        label: questionTitle,
+        allowedOptions: labels.map(optionLabel).filter(Boolean)
+      }, { type: "choice", root: section, options: labels }));
+    }
+
+    const checkboxes = [...section.querySelectorAll('input[type="checkbox"]')];
+    if (checkboxes.length) {
+      const labels = checkboxes.map((input) => input.closest("label") || input);
+      fields.push(registerField(questionId, fields.length, {
+        type: "checkbox",
+        label: questionTitle,
+        allowedOptions: labels.map(optionLabel).filter(Boolean)
+      }, { type: "choice", root: section, options: labels }));
+    }
+
+    const textControls = [...section.querySelectorAll('textarea, input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([type="file"]):not([type="submit"]):not([type="button"])')]
+      .filter((node) => !node.closest(".ace_editor") && isVisible(node));
+    textControls.forEach((node, index) => {
+      const htmlType = (node.getAttribute("type") || "text").toLowerCase();
+      let type = node.tagName === "TEXTAREA" ? "paragraph" : "short_text";
+      let format = "plain text";
+      if (htmlType === "number") { type = "number"; format = "number"; }
+      if (htmlType === "date") { type = "date"; format = "YYYY-MM-DD"; }
+      if (htmlType === "time") { type = "time"; format = "HH:MM in 24-hour time"; }
+      fields.push(registerField(questionId, fields.length, {
+        type,
+        label: node.getAttribute("aria-label") || node.getAttribute("placeholder") || (textControls.length > 1 ? `${questionTitle} — part ${index + 1}` : questionTitle),
+        format,
+        allowedOptions: []
+      }, { type: "text", root: node }));
+    });
+
+    for (const select of section.querySelectorAll("select")) {
+      const options = [...select.options].map((option) => cleanText(option.textContent)).filter(isRealDropdownOption);
+      fields.push(registerField(questionId, fields.length, {
+        type: "dropdown",
+        label: select.getAttribute("aria-label") || questionTitle,
+        allowedOptions: options
+      }, { type: "native-select", root: select }));
+    }
+
+    const fileInput = section.querySelector('input[type="file"]');
+    if (fileInput) {
+      fields.push(registerField(questionId, fields.length, {
+        type: "file_upload",
+        label: questionTitle,
+        allowedOptions: []
+      }, { type: "unsupported", root: fileInput }));
+    }
+    return fields;
+  }
+
+  function collectNptelContextImages(container, contextId, allImages) {
+    const refs = [];
+    [...container.querySelectorAll("img")].forEach((img, index) => {
+      const url = img.currentSrc || img.src;
+      if (!url || /icon|avatar|logo/i.test(`${img.alt} ${img.className}`)) return;
+      const existing = allImages.find((item) => item.url === url);
+      if (existing) {
+        refs.push(existing.ref);
+        return;
+      }
+      const ref = `${contextId}_image${index + 1}`;
+      refs.push(ref);
+      allImages.push({ ref, url, alt: img.alt || "NPTEL question context image" });
+    });
+    return refs;
+  }
+
+  function readAceText(editor) {
+    return [...editor.querySelectorAll(".ace_text-layer .ace_line")].map((line) => line.textContent || "").join("\n").trim();
   }
 
   function findQuestionContainers(formElement) {
@@ -261,6 +449,8 @@
       if (field.type === "text") didFill = fillText(field.root, values.join("\n"));
       if (field.type === "choice") didFill = fillChoices(field.options, values);
       if (field.type === "dropdown") didFill = await fillDropdown(field.root, values[0]);
+      if (field.type === "native-select") didFill = fillNativeSelect(field.root, values[0]);
+      if (field.type === "ace") didFill = await fillAceEditor(field.root, stripCodeFences(values.join("\n")));
       didFill ? (filled += 1) : (missing += 1);
       await delay(35);
     }
@@ -284,12 +474,19 @@
     const wanted = values.map(normalize);
     options.forEach((option) => {
       const shouldSelect = wanted.includes(normalize(optionLabel(option)));
-      const checked = option.getAttribute("aria-checked") === "true";
+      const control = choiceControl(option);
+      const checked = control.checked === true || control.getAttribute("aria-checked") === "true";
+      const isCheckbox = control.type === "checkbox" || control.getAttribute("role") === "checkbox";
       if (shouldSelect && !checked) option.click();
-      if (!shouldSelect && checked && option.getAttribute("role") === "checkbox") option.click();
+      if (!shouldSelect && checked && isCheckbox) option.click();
       if (shouldSelect) matches += 1;
     });
     return matches === wanted.length && matches > 0;
+  }
+
+  function choiceControl(option) {
+    if (option.matches('input[type="radio"], input[type="checkbox"], [role="radio"], [role="checkbox"]')) return option;
+    return option.querySelector('input[type="radio"], input[type="checkbox"], [role="radio"], [role="checkbox"]') || option;
   }
 
   async function fillDropdown(listbox, value) {
@@ -302,6 +499,60 @@
     }
     target.click();
     return true;
+  }
+
+  function fillNativeSelect(select, value) {
+    const option = [...select.options].find((item) => normalize(item.textContent) === normalize(value));
+    if (!option) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+    if (setter) setter.call(select, option.value);
+    else select.value = option.value;
+    select.dispatchEvent(new Event("input", { bubbles: true }));
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    return select.value === option.value;
+  }
+
+  async function fillAceEditor(editor, value) {
+    const input = editor.querySelector("textarea.ace_text-input");
+    if (!input || input.readOnly || input.disabled) return false;
+    input.focus();
+    const shortcut = new KeyboardEvent("keydown", {
+      key: "a",
+      code: "KeyA",
+      ctrlKey: !/Mac/i.test(navigator.platform),
+      metaKey: /Mac/i.test(navigator.platform),
+      bubbles: true,
+      cancelable: true
+    });
+    for (const property of ["keyCode", "which"]) {
+      try { Object.defineProperty(shortcut, property, { get: () => 65 }); } catch {}
+    }
+    input.dispatchEvent(shortcut);
+    await delay(30);
+
+    let inserted = false;
+    try {
+      inserted = document.execCommand("insertText", false, value);
+    } catch {
+      inserted = false;
+    }
+    if (!inserted) {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      if (setter) setter.call(input, value);
+      else input.value = value;
+      input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "insertText", data: value }));
+    }
+    input.dispatchEvent(new KeyboardEvent("keyup", { key: "a", code: "KeyA", bubbles: true }));
+    await delay(120);
+    return normalizeCode(readAceText(editor)) === normalizeCode(value);
+  }
+
+  function normalizeCode(value) {
+    return String(value || "").replace(/\r\n/g, "\n").trim();
+  }
+
+  function stripCodeFences(value) {
+    return String(value || "").trim().replace(/^```[^\n]*\n/i, "").replace(/\n```\s*$/, "");
   }
 
   function getQuestionDescription(container, heading) {

@@ -16,8 +16,8 @@ async function initialize() {
   const settings = await chrome.storage.local.get(["apiKey", "model"]);
   modelText.textContent = settings.model || "google/gemini-3.7-flash";
 
-  if (!url?.startsWith("https://docs.google.com/forms/")) {
-    setStatus("Open a Google Form to use AI Gateway.", "error");
+  if (!isSupportedUrl(url)) {
+    setStatus("Open a supported assessment page.", "error");
     return;
   }
   if (!settings.apiKey) {
@@ -27,11 +27,12 @@ async function initialize() {
 
   try {
     const page = await chrome.tabs.sendMessage(activeTabId, { type: "PING" });
-    if (!page?.isRespondentView) throw new Error("Not a respondent form");
-    setStatus("Ready to analyze and fill this form.", "ready");
+    if (!page?.isSupportedPage) throw new Error("Unsupported page");
+    const label = page.site === "nptel" ? "NPTEL assessment" : "Google Form";
+    setStatus(`Ready to analyze this ${label}.`, "ready");
     autofillButton.disabled = false;
   } catch {
-    setStatus("Open the public/respondent view of a Google Form.", "error");
+    setStatus("Reload the extension, then refresh this page.", "error");
   }
 }
 
@@ -56,6 +57,11 @@ function setBusy(busy) {
   autofillButton.disabled = busy;
   spinner.hidden = !busy;
   buttonText.textContent = busy ? "Working…" : "Autofill again";
+}
+
+function isSupportedUrl(url) {
+  return url?.startsWith("https://docs.google.com/forms/") ||
+    url?.startsWith("https://onlinecourses.nptel.ac.in/e-learning/course/");
 }
 
 function setStatus(message, state) {

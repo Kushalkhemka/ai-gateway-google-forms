@@ -23,9 +23,9 @@
         <label for="model">Model</label>
         <input id="model" name="model" value="google/gemini-3.7-flash" readonly />
 
-        <label for="maxImages">Maximum images per form</label>
+        <label for="maxImages">Maximum images per assessment</label>
         <input id="maxImages" name="maxImages" type="number" min="10" max="30" step="1" value="20" />
-        <p class="help">Supports multiple images per question. Images are included in the same request as the full form.</p>
+        <p class="help">Supports multiple images per question. Images are included in the same request as the complete assessment.</p>
 
         <label for="instructions">Answer style</label>
         <textarea id="instructions" name="instructions" rows="4"></textarea>
@@ -38,7 +38,7 @@
 
       <aside>
         <strong>Privacy note</strong>
-        <p>Form questions and question images are sent to Vercel AI Gateway and routed only to Google when you press Autofill. AI Gateway never clicks Submit.</p>
+        <p>Assessment questions, code context, and question images are sent to Vercel AI Gateway using automatic provider routing when you press Autofill. AI Gateway never clicks Compile, Run, Save, or Submit.</p>
       </aside>
     </main>
     <script src="options.js"></script>

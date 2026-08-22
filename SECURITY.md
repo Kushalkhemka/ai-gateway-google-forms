@@ -9,10 +9,10 @@ Include the affected extension version, a concise reproduction path, expected an
 ## Security model
 
 - API keys are stored in `chrome.storage.local` and are not included in source files.
-- The content script runs only on `docs.google.com/forms/*` pages.
+- The content script runs only on `docs.google.com/forms/*` and `onlinecourses.nptel.ac.in/e-learning/course/*` pages.
 - Additional `docs.google.com/*` host access downloads Google Forms image assets for inline encoding.
 - Gateway requests are sent only after explicit user invocation.
 - Returned field IDs are validated against IDs generated for the current page.
-- The extension fills answers but never submits the form.
+- The extension fills answers or code but never submits, compiles, or runs an assessment.
 
 Users should create a dedicated Vercel AI Gateway key with appropriate budgets and rotate it if exposed.
