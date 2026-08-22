@@ -1,6 +1,6 @@
 {
   "name": "ai-gateway-google-forms",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "Multimodal Google Forms and NPTEL assessment autofill Chrome extension",
   "scripts": {

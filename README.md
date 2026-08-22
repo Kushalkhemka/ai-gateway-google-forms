@@ -23,6 +23,7 @@ Most assessment assistants process one field at a time and lose the context conn
 - **Exact option matching** — radio, checkbox, dropdown, and grid responses must match labels present in the form.
 - **Humanized writing** — subjective responses are concise, natural, and configurable.
 - **Programming support** — NPTEL problem statements, selected language, starter code, constraints, and samples are solved as one complete source file.
+- **Clipboard compatibility** — restores selection, copy, paste, cut, and right-click throughout NPTEL without disabling Ace editor controls.
 - **No surprise submission** — answers are filled for review; the extension never presses Submit.
 - **Zero build step** — plain Manifest V3, HTML, CSS, and JavaScript.
 
@@ -31,6 +32,7 @@ Most assessment assistants process one field at a time and lose the context conn
 | Platform | Page type | Support |
 |---|---|:---:|
 | Google Forms | Public/respondent forms | ✅ |
+| NPTEL | Text selection, copy/paste, and right-click on course pages | ✅ |
 | NPTEL/SWAYAM | MCQ, MSQ, numerical, short answer, essay | ✅ |
 | NPTEL/SWAYAM | Programming assignments with Ace Editor | ✅ |
 
@@ -76,6 +78,8 @@ flowchart LR
 4. Vercel AI Gateway sends one structured multimodal request to `google/gemini-3.7-flash` using automatic provider routing.
 5. The response must satisfy a strict JSON schema. Unknown field IDs are discarded.
 6. The extension fills native controls and Ace Editor while leaving every submit/compile action to the user.
+
+On NPTEL pages, a compatibility script runs at document start. It prevents page-level clipboard blockers while preserving element-level listeners and ordinary keyboard handling. It deliberately avoids global `pointer-events` overrides so buttons, menus, and editors continue to behave normally.
 
 ## Install locally
 
@@ -162,6 +166,7 @@ The self-test verifies:
 .
 ├── background.js        # Gateway request, schema, image encoding, toolbar state
 ├── content.js           # Site adapters, keyboard shortcut, native/Ace autofill
+├── nptel-clipboard.js   # Early NPTEL selection and clipboard compatibility
 ├── popup.*              # Compact extension action UI
 ├── options.*            # Local settings UI
 ├── icons/               # Runtime extension icons (Vercel integration)
@@ -186,6 +191,10 @@ Model-generated answers can be wrong. Always review the completed form before su
 ## Contributing
 
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, testing, and contribution expectations.
+
+## Acknowledgements
+
+The NPTEL clipboard compatibility approach was informed by [agrim-rai/unNPTEL](https://github.com/agrim-rai/unNPTEL). AI Gateway uses an independently scoped implementation that preserves non-clipboard keyboard handlers and avoids global pointer-event overrides.
 
 ---
 
