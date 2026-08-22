@@ -55,7 +55,7 @@ async function solveForm(form) {
         {
           role: "system",
           content:
-            "You solve structured practice assessments from supported learning sites. Follow the supplied output contract exactly. Never invent field IDs or option labels. For code fields, return complete executable source code only."
+            "You solve structured practice assessments extracted from web pages. Follow the supplied output contract exactly. Never invent field IDs or option labels. For code fields, return complete executable source code only."
         },
         { role: "user", content }
       ],

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AI Gateway",
-  "version": "1.1.1",
-  "description": "Autofill Google Forms and NPTEL assessments, with NPTEL copy and paste support.",
+  "version": "1.2.0",
+  "description": "Autofill MCQ quizzes and forms on the web with one multimodal AI request.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -11,11 +11,8 @@
   },
   "permissions": ["activeTab", "storage"],
   "host_permissions": [
-    "https://docs.google.com/*",
-    "https://*.googleusercontent.com/*",
-    "https://onlinecourses.nptel.ac.in/*",
-    "https://storage.googleapis.com/*",
-    "https://ai-gateway.vercel.sh/*"
+    "http://*/*",
+    "https://*/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -42,8 +39,8 @@
     },
     {
       "matches": [
-        "https://docs.google.com/forms/*",
-        "https://onlinecourses.nptel.ac.in/e-learning/course/*"
+        "http://*/*",
+        "https://*/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"

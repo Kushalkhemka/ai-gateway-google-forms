@@ -40,9 +40,23 @@
       !!document.querySelector("main.practice-questions");
   }
 
+  function isGenericQuizPage() {
+    if (!/^https?:$/.test(location.protocol)) return false;
+    if (location.hostname === "docs.google.com" && location.pathname.includes("/forms/")) return false;
+    const root = document.querySelector("main") || document.body;
+    const radios = [...root.querySelectorAll('input[type="radio"], [role="radio"]')].filter(isVisible);
+    if (radios.length >= 2) return true;
+    const checkboxes = [...root.querySelectorAll('input[type="checkbox"], [role="checkbox"]')].filter(isVisible);
+    return checkboxes.some((checkbox) => {
+      const container = genericQuestionContainer(checkbox, root);
+      return [...container.querySelectorAll('input[type="checkbox"], [role="checkbox"]')].filter(isVisible).length >= 2;
+    });
+  }
+
   function detectSite() {
     if (isRespondentForm()) return "google_forms";
     if (isNptelAssessment()) return "nptel";
+    if (isGenericQuizPage()) return "generic_web";
     return "unsupported";
   }
 
@@ -70,6 +84,7 @@
   async function extractPage() {
     if (isRespondentForm()) return extractGoogleForm();
     if (isNptelAssessment()) return extractNptelAssessment();
+    if (isGenericQuizPage()) return extractGenericAssessment();
     throw new Error("This page is not supported by AI Gateway.");
   }
 
@@ -276,6 +291,208 @@
     return [...editor.querySelectorAll(".ace_text-layer .ace_line")].map((line) => line.textContent || "").join("\n").trim();
   }
 
+  async function extractGenericAssessment() {
+    runtime.fieldNodes.clear();
+    const root = document.querySelector("main") || document.body;
+    const title = cleanText(document.querySelector("h1, [role=heading][aria-level='1']")?.textContent) || document.title;
+    const description = cleanText(document.querySelector("main > p, form > p, [class*='description' i]")?.textContent).slice(0, 2000);
+    const questions = [];
+    const images = [];
+    const claimed = new Set();
+
+    const addQuestion = (controls, type, nodeFieldType, labelRoot = null) => {
+      const visibleControls = controls.filter((control) => isVisible(control) && !control.disabled);
+      if (!visibleControls.length || visibleControls.some((control) => claimed.has(control))) return;
+      visibleControls.forEach((control) => claimed.add(control));
+      const container = genericQuestionContainer(labelRoot || visibleControls[0], root);
+      const questionId = `web_q${questions.length + 1}`;
+      const options = type === "radio" || type === "checkbox"
+        ? visibleControls.map(nativeChoiceLabelElement)
+        : [];
+      const allowedOptions = options.map(optionLabel).filter(Boolean);
+      const questionTitle = genericQuestionTitle(container, visibleControls[0], allowedOptions, questions.length + 1);
+      const field = registerField(questionId, 0, {
+        type,
+        label: questionTitle,
+        allowedOptions
+      }, { type: nodeFieldType, root: labelRoot || container, options });
+      questions.push({
+        id: questionId,
+        title: questionTitle,
+        description: genericQuestionDescription(container, questionTitle, allowedOptions),
+        required: visibleControls.some((control) => control.required || control.getAttribute("aria-required") === "true"),
+        imageRefs: collectQuestionImages(container, questionId, images),
+        fields: [field]
+      });
+    };
+
+    const nativeRadios = [...root.querySelectorAll('input[type="radio"]')];
+    for (const radio of nativeRadios) {
+      if (claimed.has(radio) || !isVisible(radio)) continue;
+      const name = radio.name;
+      const semanticContainer = genericQuestionContainer(radio, root);
+      const group = name
+        ? nativeRadios.filter((item) => item.name === name && item.form === radio.form)
+        : [...semanticContainer.querySelectorAll('input[type="radio"]')];
+      const container = semanticContainer === root || semanticContainer.matches("form")
+        ? commonControlContainer(group, semanticContainer)
+        : semanticContainer;
+      addQuestion(group, "radio", "choice", container);
+    }
+
+    const nativeCheckboxes = [...root.querySelectorAll('input[type="checkbox"]')];
+    for (const checkbox of nativeCheckboxes) {
+      if (claimed.has(checkbox) || !isVisible(checkbox)) continue;
+      const container = genericQuestionContainer(checkbox, root);
+      const containerGroup = [...container.querySelectorAll('input[type="checkbox"]')];
+      const group = container !== root && !container.matches("form") && containerGroup.length > 1
+        ? containerGroup
+        : checkbox.name
+          ? nativeCheckboxes.filter((item) => item.name === checkbox.name && item.form === checkbox.form)
+          : containerGroup;
+      addQuestion(group, "checkbox", "choice", container);
+    }
+
+    for (const group of [...root.querySelectorAll('[role="radiogroup"]')].filter(isVisible)) {
+      addQuestion([...group.querySelectorAll('[role="radio"]')], "radio", "choice", group);
+    }
+    for (const group of [...root.querySelectorAll('[role="group"]')].filter((node) => isVisible(node) && node.querySelector('[role="checkbox"]'))) {
+      addQuestion([...group.querySelectorAll('[role="checkbox"]')], "checkbox", "choice", group);
+    }
+
+    const selects = [...root.querySelectorAll("select")].filter((node) => isVisible(node) && !node.disabled);
+    for (const select of selects) {
+      const options = [...select.options].map((option) => cleanText(option.textContent)).filter(isRealDropdownOption);
+      if (!options.length) continue;
+      const container = genericQuestionContainer(select, root);
+      const questionId = `web_q${questions.length + 1}`;
+      const questionTitle = genericQuestionTitle(container, select, options, questions.length + 1);
+      const field = registerField(questionId, 0, {
+        type: "dropdown",
+        label: questionTitle,
+        allowedOptions: options
+      }, { type: "native-select", root: select });
+      questions.push({
+        id: questionId,
+        title: questionTitle,
+        description: genericQuestionDescription(container, questionTitle, options),
+        required: select.required || select.getAttribute("aria-required") === "true",
+        imageRefs: collectQuestionImages(container, questionId, images),
+        fields: [field]
+      });
+    }
+
+    for (const listbox of [...root.querySelectorAll('[role="listbox"]')].filter(isVisible)) {
+      const options = await readDropdownOptions(listbox);
+      if (!options.length) continue;
+      const container = genericQuestionContainer(listbox, root);
+      const questionId = `web_q${questions.length + 1}`;
+      const questionTitle = genericQuestionTitle(container, listbox, options, questions.length + 1);
+      const field = registerField(questionId, 0, {
+        type: "dropdown",
+        label: questionTitle,
+        allowedOptions: options
+      }, { type: "dropdown", root: listbox });
+      questions.push({
+        id: questionId,
+        title: questionTitle,
+        description: genericQuestionDescription(container, questionTitle, options),
+        required: listbox.getAttribute("aria-required") === "true",
+        imageRefs: collectQuestionImages(container, questionId, images),
+        fields: [field]
+      });
+    }
+
+    const textControls = [...root.querySelectorAll('textarea, input[type="text"], input[type="number"], input[type="date"], input[type="time"]')]
+      .filter((node) => isVisible(node) && !node.disabled && !node.readOnly && !node.closest(".ace_editor"));
+    for (const control of textControls) {
+      const container = genericQuestionContainer(control, root);
+      if (!container.querySelector('input[type="radio"], input[type="checkbox"], [role="radio"], [role="checkbox"]') && !/question|quiz|answer/i.test(container.className || "")) continue;
+      const questionId = `web_q${questions.length + 1}`;
+      const htmlType = (control.getAttribute("type") || "text").toLowerCase();
+      let type = control.tagName === "TEXTAREA" ? "paragraph" : "short_text";
+      let format = "plain text";
+      if (htmlType === "number") { type = "number"; format = "number"; }
+      if (htmlType === "date") { type = "date"; format = "YYYY-MM-DD"; }
+      if (htmlType === "time") { type = "time"; format = "HH:MM in 24-hour time"; }
+      const questionTitle = genericQuestionTitle(container, control, [], questions.length + 1);
+      const field = registerField(questionId, 0, {
+        type,
+        label: questionTitle,
+        format,
+        allowedOptions: []
+      }, { type: "text", root: control });
+      questions.push({
+        id: questionId,
+        title: questionTitle,
+        description: genericQuestionDescription(container, questionTitle, []),
+        required: control.required || control.getAttribute("aria-required") === "true",
+        imageRefs: collectQuestionImages(container, questionId, images),
+        fields: [field]
+      });
+    }
+
+    return { site: "generic_web", assessmentType: "generic_quiz", title, description, url: location.href, questions, images };
+  }
+
+  function genericQuestionContainer(control, root) {
+    return control.closest([
+      "[data-question-id]",
+      "[data-question]",
+      "fieldset",
+      "[role='radiogroup']",
+      "[role='group']",
+      ".question",
+      ".quiz-question",
+      ".quiz-item",
+      ".form-group",
+      ".field",
+      "[data-testid*='question' i]",
+      "[class*='question' i]",
+      "[class*='question-container' i]",
+      "[class*='question-card' i]",
+      "article",
+      "section",
+      "li"
+    ].join(",")) || control.closest("form") || root;
+  }
+
+  function commonControlContainer(controls, fallback) {
+    let candidate = controls[0]?.parentElement;
+    while (candidate && candidate !== fallback && !controls.every((control) => candidate.contains(control))) {
+      candidate = candidate.parentElement;
+    }
+    return candidate || fallback;
+  }
+
+  function nativeChoiceLabelElement(control) {
+    if (control.matches('[role="radio"], [role="checkbox"]')) return control;
+    if (control.id) {
+      const escapedId = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(control.id) : control.id.replace(/["\\]/g, "\\$&");
+      const explicit = document.querySelector(`label[for="${escapedId}"]`);
+      if (explicit) return explicit;
+    }
+    return control.closest("label") || control.parentElement || control;
+  }
+
+  function genericQuestionTitle(container, control, options, index) {
+    const explicit = cleanText(
+      container.querySelector("legend, [data-question-text], .question-text, .question-title, h1, h2, h3, h4, [role='heading']")?.textContent ||
+      control.getAttribute("aria-label") ||
+      control.getAttribute("placeholder")
+    );
+    if (explicit) return explicit.replace(/^\d+[.)]\s*/, "").slice(0, 1200);
+    let text = cleanText(container.innerText);
+    options.forEach((option) => { text = text.replace(option, " "); });
+    return cleanText(text).replace(/^\d+[.)]\s*/, "").slice(0, 1200) || `Question ${index}`;
+  }
+
+  function genericQuestionDescription(container, title, options) {
+    let text = cleanText(container.innerText).replace(title, " ");
+    options.forEach((option) => { text = text.replace(option, " "); });
+    return cleanText(text).slice(0, 2000);
+  }
+
   function findQuestionContainers(formElement) {
     if (!formElement) return [];
     const controlSelector = 'input:not([type="hidden"]), textarea, [role="radio"], [role="checkbox"], [role="listbox"], [role="slider"], input[type="date"], input[type="time"]';
@@ -407,12 +624,16 @@
     const imageNodes = [...container.querySelectorAll("img")].filter((img) => {
       const src = img.currentSrc || img.src;
       const rect = img.getBoundingClientRect();
-      return src && isVisible(img) && rect.width >= 48 && rect.height >= 48 && !/icon|avatar|logo/i.test(`${img.alt} ${img.className}`);
+      return isSupportedImageUrl(src) && isVisible(img) && rect.width >= 48 && rect.height >= 48 && !/icon|avatar|logo/i.test(`${img.alt} ${img.className}`);
     });
     imageNodes.forEach((img, index) => {
-      const ref = `${questionId}_image${index + 1}`;
       const url = img.currentSrc || img.src;
-      if (!url || allImages.some((item) => item.url === url && item.ref.startsWith(questionId))) return;
+      const existing = allImages.find((item) => item.url === url);
+      if (existing) {
+        refs.push(existing.ref);
+        return;
+      }
+      const ref = `${questionId}_image${index + 1}`;
       refs.push(ref);
       allImages.push({ ref, url, alt: img.alt || "" });
     });
@@ -424,13 +645,17 @@
       if (questionContainers.some((container) => container.contains(img))) return false;
       const src = img.currentSrc || img.src;
       const rect = img.getBoundingClientRect();
-      return src && isVisible(img) && rect.width >= 80 && rect.height >= 60 && !/icon|avatar|logo/i.test(`${img.alt} ${img.className}`);
+      return isSupportedImageUrl(src) && isVisible(img) && rect.width >= 80 && rect.height >= 60 && !/icon|avatar|logo/i.test(`${img.alt} ${img.className}`);
     });
     unclaimed.forEach((img, index) => {
       const url = img.currentSrc || img.src;
       if (!url || allImages.some((item) => item.url === url)) return;
       allImages.push({ ref: `form_image${index + 1}`, url, alt: img.alt || "Form-level image" });
     });
+  }
+
+  function isSupportedImageUrl(url) {
+    return /^(?:https?:|data:image\/)/i.test(String(url || ""));
   }
 
   async function applyAnswers(answers) {

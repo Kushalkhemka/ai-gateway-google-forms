@@ -27,8 +27,15 @@ async function initialize() {
 
   try {
     const page = await chrome.tabs.sendMessage(activeTabId, { type: "PING" });
-    if (!page?.isSupportedPage) throw new Error("Unsupported page");
-    const label = page.site === "nptel" ? "NPTEL assessment" : "Google Form";
+    if (!page?.isSupportedPage) {
+      setStatus("No supported MCQ form was found on this page.", "error");
+      return;
+    }
+    const label = page.site === "nptel"
+      ? "NPTEL assessment"
+      : page.site === "google_forms"
+        ? "Google Form"
+        : "web quiz";
     setStatus(`Ready to analyze this ${label}.`, "ready");
     autofillButton.disabled = false;
   } catch {
@@ -60,8 +67,7 @@ function setBusy(busy) {
 }
 
 function isSupportedUrl(url) {
-  return url?.startsWith("https://docs.google.com/forms/") ||
-    url?.startsWith("https://onlinecourses.nptel.ac.in/e-learning/course/");
+  return /^https?:\/\//i.test(url || "");
 }
 
 function setStatus(message, state) {

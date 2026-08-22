@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Generic MCQ Fixture</title>
+    <style>
+      body { margin: 0; background: #f5f5f5; color: #111; font: 16px/1.5 system-ui, sans-serif; }
+      main { width: min(720px, calc(100% - 32px)); margin: 40px auto; }
+      form { display: grid; gap: 18px; }
+      fieldset, .question { padding: 20px; border: 1px solid #ddd; border-radius: 14px; background: #fff; }
+      label { display: block; margin: 9px 0; }
+      select, textarea { box-sizing: border-box; width: 100%; padding: 10px; }
+      button { width: fit-content; padding: 10px 18px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Machine Learning Practice Quiz</h1>
+      <p>Choose the best answers. This fixture records submit attempts but never navigates.</p>
+      <form id="quiz">
+        <fieldset>
+          <legend>Which method is supervised learning?</legend>
+          <label><input type="radio" name="supervised" value="linear" /> Linear regression</label>
+          <label><input type="radio" name="supervised" value="kmeans" /> K-means clustering</label>
+          <label><input type="radio" name="supervised" value="pca" /> PCA</label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Select classification metrics</legend>
+          <label><input type="checkbox" name="metric-accuracy" /> Accuracy</label>
+          <label><input type="checkbox" name="metric-recall" /> Recall</label>
+          <label><input type="checkbox" name="metric-rmse" /> RMSE</label>
+        </fieldset>
+
+        <div class="question">
+          <h2>Choose a common validation method</h2>
+          <select required>
+            <option>Select an option</option>
+            <option>Cross-validation</option>
+            <option>Gradient descent</option>
+          </select>
+        </div>
+
+        <div class="question">
+          <h2>Why is a validation set useful?</h2>
+          <textarea rows="4" placeholder="Short explanation"></textarea>
+        </div>
+
+        <button type="submit">Submit quiz</button>
+        <output id="submission-state">Not submitted</output>
+      </form>
+    </main>
+    <script>
+      document.querySelector("#quiz").addEventListener("submit", (event) => {
+        event.preventDefault();
+        document.querySelector("#submission-state").textContent = "Submit attempted";
+      });
+    </script>
+  </body>
+</html>

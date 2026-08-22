@@ -9,8 +9,8 @@ Include the affected extension version, a concise reproduction path, expected an
 ## Security model
 
 - API keys are stored in `chrome.storage.local` and are not included in source files.
-- The autofill content script runs only on `docs.google.com/forms/*` and `onlinecourses.nptel.ac.in/e-learning/course/*` pages; clipboard compatibility is limited to NPTEL domains.
-- Additional `docs.google.com/*` host access downloads Google Forms image assets for inline encoding.
+- The autofill content script is available on HTTP and HTTPS pages to support general web quizzes, but it performs no extraction or network request until explicit user invocation; clipboard compatibility remains limited to NPTEL domains.
+- Broad HTTP/HTTPS host access enables general quiz detection and cross-origin question-image retrieval; no page data is read or transmitted until explicit invocation.
 - Gateway requests are sent only after explicit user invocation.
 - The NPTEL clipboard compatibility script runs in the page world but has no access to extension storage or the configured API key.
 - Returned field IDs are validated against IDs generated for the current page.

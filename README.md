@@ -1,8 +1,8 @@
 <div align="center">
   <img src="assets/ai-gateway-mark.svg" width="112" alt="AI Gateway logo" />
-  <h1>AI Gateway for Google Forms &amp; NPTEL</h1>
+  <h1>AI Gateway for Web Quizzes</h1>
   <p><strong>One prompt. Every question. A review-ready assessment.</strong></p>
-  <p>A privacy-conscious Chrome extension that understands complete Google Forms and NPTEL assessments—including images, grids, subjective answers, and programming problems.</p>
+  <p>A privacy-conscious Chrome extension that understands MCQ forms across the web, with specialized support for Google Forms and NPTEL—including images, grids, subjective answers, and programming problems.</p>
   <p>
     <img alt="Manifest V3" src="https://img.shields.io/badge/Manifest-V3-111111?style=flat-square&amp;logo=googlechrome&amp;logoColor=white" />
     <img alt="JavaScript" src="https://img.shields.io/badge/JavaScript-Vanilla-111111?style=flat-square&amp;logo=javascript&amp;logoColor=white" />
@@ -19,6 +19,7 @@
 Most assessment assistants process one field at a time and lose the context connecting questions, answer choices, scenarios, code, and diagrams. AI Gateway takes the opposite approach: it extracts the entire supported assessment, builds one structured multimodal request, and applies one validated answer plan back to the page.
 
 - **Whole-form reasoning** — every supported question is included in a single prompt.
+- **Works across the web** — detects ordinary native and ARIA-based quiz controls on HTTP and HTTPS pages.
 - **Real vision input** — images are downloaded and embedded as inline base64 payloads, so providers never need to crawl Google-hosted URLs.
 - **Exact option matching** — radio, checkbox, dropdown, and grid responses must match labels present in the form.
 - **Humanized writing** — subjective responses are concise, natural, and configurable.
@@ -32,6 +33,7 @@ Most assessment assistants process one field at a time and lose the context conn
 | Platform | Page type | Support |
 |---|---|:---:|
 | Google Forms | Public/respondent forms | ✅ |
+| General websites | Native/ARIA radio, checkbox, select, and related answer fields | ✅ |
 | NPTEL | Text selection, copy/paste, and right-click on course pages | ✅ |
 | NPTEL/SWAYAM | MCQ, MSQ, numerical, short answer, essay | ✅ |
 | NPTEL/SWAYAM | Programming assignments with Ace Editor | ✅ |
@@ -55,11 +57,13 @@ Most assessment assistants process one field at a time and lose the context conn
 
 ```mermaid
 flowchart LR
-    A[Google Form or NPTEL] --> B[Site adapter]
+    A[Web quiz] --> B[Site adapter]
     B --> C1[Google Forms extractor]
     B --> C2[NPTEL assessment extractor]
+    B --> C3[Generic web extractor]
     C1 --> C[Structured questions<br/>fields + exact options]
     C2 --> C
+    C3 --> C
     C2 --> K[Programming context<br/>language + starter + samples]
     C --> D[Inline image encoder<br/>base64 + imageRefs]
     C --> E[Vercel AI Gateway]
@@ -72,14 +76,14 @@ flowchart LR
     I --> J[Review filled form]
 ```
 
-1. The content script selects a dedicated Google Forms or NPTEL adapter.
+1. The content script selects Google Forms, NPTEL, or generic web extraction; specialized adapters take priority.
 2. Every field receives a stable request-local ID. Choice labels are preserved verbatim.
 3. Up to 20 images by default are downloaded, optimized when necessary, and attached inline with exact `imageRefs`.
 4. Vercel AI Gateway sends one structured multimodal request to `google/gemini-3.7-flash` using automatic provider routing.
 5. The response must satisfy a strict JSON schema. Unknown field IDs are discarded.
 6. The extension fills native controls and Ace Editor while leaving every submit/compile action to the user.
 
-On NPTEL pages, a compatibility script runs at document start. It prevents page-level clipboard blockers while preserving element-level listeners and ordinary keyboard handling. It deliberately avoids global `pointer-events` overrides so buttons, menus, and editors continue to behave normally.
+On general websites, AI Gateway activates only when the page contains a credible MCQ group: at least two visible radio choices or a grouped set of checkboxes. On NPTEL pages, a compatibility script additionally prevents page-level clipboard blockers while preserving element-level listeners and ordinary keyboard handling.
 
 ## Install locally
 
@@ -96,12 +100,12 @@ On NPTEL pages, a compatibility script runs at document start. It prevents page-
 git clone https://github.com/Kushalkhemka/ai-gateway-google-forms.git
 ```
 
-After pulling an update, click **Reload** on the extension card and refresh any already-open Google Form or NPTEL tabs.
+After pulling an update, click **Reload** on the extension card, approve the broader website permission, and refresh any already-open quiz tabs.
 
 ## Usage
 
-1. Open a Google Form respondent page or a supported NPTEL assessment.
-2. Click the **AI Gateway** toolbar icon and select **Autofill assessment**.
+1. Open a web quiz, Google Form respondent page, or supported NPTEL assessment.
+2. Click the **AI Gateway** toolbar icon and select **Autofill quiz**.
 3. Or press **Ctrl+Enter** on Windows/Linux and **Command+Enter** or **Control+Enter** on macOS.
 4. Wait for the toolbar icon to return to its normal state.
 5. Review every response before submitting manually.
@@ -139,6 +143,7 @@ No assessment URL or externally hosted image URL is sent for the model provider 
 - Automatic provider routing improves availability during provider-specific outages.
 - The extension does not collect analytics, run a backend, or auto-submit forms.
 - Form text is treated as untrusted content and cannot change the response contract or request secrets.
+- General website support requires Chrome's **read and change data on all websites** permission so the content script can inspect quiz controls and retrieve cross-origin question images. It performs no extraction or AI request until you explicitly invoke Autofill.
 
 Review [SECURITY.md](SECURITY.md) before reporting a vulnerability publicly.
 

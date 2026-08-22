@@ -10,14 +10,14 @@ const manifest = JSON.parse(await readFile(path.join(root, "manifest.json"), "ut
 assert.equal(manifest.manifest_version, 3);
 const autofillScript = manifest.content_scripts.find((script) => script.js.includes("content.js"));
 const clipboardScript = manifest.content_scripts.find((script) => script.js.includes("nptel-clipboard.js"));
-assert.ok(autofillScript.matches.includes("https://docs.google.com/forms/*"));
-assert.ok(autofillScript.matches.includes("https://onlinecourses.nptel.ac.in/e-learning/course/*"));
+assert.ok(autofillScript.matches.includes("http://*/*"));
+assert.ok(autofillScript.matches.includes("https://*/*"));
 assert.equal(clipboardScript.run_at, "document_start");
 assert.equal(clipboardScript.world, "MAIN");
 assert.equal(clipboardScript.all_frames, true);
 assert.ok(clipboardScript.matches.includes("https://*.nptel.ac.in/*"));
-assert.ok(manifest.host_permissions.includes("https://ai-gateway.vercel.sh/*"));
-assert.ok(manifest.host_permissions.includes("https://storage.googleapis.com/*"));
+assert.ok(manifest.host_permissions.includes("http://*/*"));
+assert.ok(manifest.host_permissions.includes("https://*/*"));
 
 const javascript = (await readdir(root)).filter((name) => name.endsWith(".js"));
 for (const file of javascript) {
@@ -28,6 +28,7 @@ for (const file of javascript) {
 const background = await readFile(path.join(root, "background.js"), "utf8");
 const content = await readFile(path.join(root, "content.js"), "utf8");
 const clipboard = await readFile(path.join(root, "nptel-clipboard.js"), "utf8");
+const genericFixture = await readFile(path.join(root, "tests/fixtures/generic-quiz.html"), "utf8");
 const allSource = await Promise.all(
   (await readdir(root)).filter((name) => /\.(?:js|json|html|md)$/.test(name)).map((name) => readFile(path.join(root, name), "utf8"))
 );
@@ -47,6 +48,11 @@ assert.match(content, /event\.ctrlKey \|\| event\.metaKey/);
 assert.match(content, /window\.addEventListener\("keydown", handleShortcut, true\)/);
 assert.match(content, /window\.addEventListener\("keyup", handleShortcut, true\)/);
 assert.match(content, /extractNptelAssessment/);
+assert.match(content, /extractGenericAssessment/);
+assert.match(content, /site: "generic_web"/);
+assert.match(content, /genericQuestionContainer/);
+assert.match(content, /commonControlContainer/);
+assert.doesNotMatch(content, /\.submit\(/);
 assert.match(content, /main\.programming-assessment-main/);
 assert.match(content, /fillAceEditor/);
 assert.match(clipboard, /clipboardEvents/);
@@ -104,5 +110,10 @@ fakeWindow.dispatchEvent({ type: "keydown", key: "c", ctrlKey: true, metaKey: fa
 fakeWindow.dispatchEvent({ type: "keydown", key: "Enter", ctrlKey: true, metaKey: false, altKey: false });
 assert.equal(rootKeyCalls, 1, "Only clipboard keyboard shortcuts should bypass page-root handlers");
 assert.equal(injectedStyles[0]?.id, "ai-gateway-nptel-copy-style");
+assert.match(genericFixture, /input type="radio"/);
+assert.match(genericFixture, /input type="checkbox"/);
+assert.match(genericFixture, /<select required>/);
+assert.match(genericFixture, /<textarea/);
+assert.match(genericFixture, /Not submitted/);
 
-console.log(`Self-test passed: ${javascript.length} scripts, secure configuration, multimodal Google Forms and NPTEL support.`);
+console.log(`Self-test passed: ${javascript.length} scripts, secure configuration, and generic multimodal quiz support.`);
