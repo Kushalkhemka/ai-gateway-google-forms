@@ -6,9 +6,9 @@
   <p>
     <img alt="Manifest V3" src="https://img.shields.io/badge/Manifest-V3-111111?style=flat-square&amp;logo=googlechrome&amp;logoColor=white" />
     <img alt="JavaScript" src="https://img.shields.io/badge/JavaScript-Vanilla-111111?style=flat-square&amp;logo=javascript&amp;logoColor=white" />
-    <img alt="Vercel AI Gateway" src="https://img.shields.io/badge/AI%20Gateway-Vercel-111111?style=flat-square&amp;logo=vercel&amp;logoColor=white" />
+    <img alt="Four AI providers" src="https://img.shields.io/badge/AI%20Providers-4-111111?style=flat-square&amp;logoColor=white" />
     <img alt="NPTEL" src="https://img.shields.io/badge/Platform-NPTEL-111111?style=flat-square&amp;logoColor=white" />
-    <img alt="Gemini 3.7 Flash" src="https://img.shields.io/badge/Model-Gemini%203.7%20Flash-111111?style=flat-square&amp;logo=google&amp;logoColor=white" />
+    <img alt="Vision models" src="https://img.shields.io/badge/Models-Vision%20only-111111?style=flat-square&amp;logo=google&amp;logoColor=white" />
   </p>
 </div>
 
@@ -21,6 +21,8 @@ Most assessment assistants process one field at a time and lose the context conn
 - **Whole-form reasoning** — every supported question is included in a single prompt.
 - **Works across the web** — detects ordinary native and ARIA-based quiz controls on HTTP and HTTPS pages.
 - **Real vision input** — images are downloaded and embedded as inline base64 payloads, so providers never need to crawl Google-hosted URLs.
+- **Provider choice** — use Vercel AI Gateway, Google AI Studio, OpenRouter, or NVIDIA NIM with separate locally stored keys.
+- **Vision-only model selector** — live provider catalogs are filtered for image input and text output, with a conservative verified fallback list.
 - **Exact option matching** — radio, checkbox, dropdown, and grid responses must match labels present in the form.
 - **Humanized writing** — subjective responses are concise, natural, and configurable.
 - **Programming support** — NPTEL problem statements, selected language, starter code, constraints, and samples are solved as one complete source file.
@@ -66,11 +68,17 @@ flowchart LR
     C3 --> C
     C2 --> K[Programming context<br/>language + starter + samples]
     C --> D[Inline image encoder<br/>base64 + imageRefs]
-    C --> E[Vercel AI Gateway]
+    C --> E{Selected provider}
     K --> E
     D --> E
-    E --> F[Gemini 3.7 Flash]
-    F --> G[Strict JSON answer plan]
+    E --> F1[Vercel AI Gateway]
+    E --> F2[Google AI Studio]
+    E --> F3[OpenRouter]
+    E --> F4[NVIDIA NIM]
+    F1 --> G[JSON answer plan]
+    F2 --> G
+    F3 --> G
+    F4 --> G
     G --> H[ID validation]
     H --> I[Native DOM events]
     I --> J[Review filled form]
@@ -79,8 +87,8 @@ flowchart LR
 1. The content script selects Google Forms, NPTEL, or generic web extraction; specialized adapters take priority.
 2. Every field receives a stable request-local ID. Choice labels are preserved verbatim.
 3. Up to 20 images by default are downloaded, optimized when necessary, and attached inline with exact `imageRefs`.
-4. Vercel AI Gateway sends one structured multimodal request to `google/gemini-3.7-flash` using automatic provider routing.
-5. The response must satisfy a strict JSON schema. Unknown field IDs are discarded.
+4. The selected provider sends one multimodal request using the model selected in Settings. Vercel uses its strict JSON-schema mode; direct providers receive the same explicit output contract in the prompt.
+5. The answer plan is parsed and unknown field IDs are discarded.
 6. The extension fills native controls and Ace Editor while leaving every submit/compile action to the user.
 
 On general websites, AI Gateway activates only when the page contains a credible MCQ group: at least two visible radio choices or a grouped set of checkboxes. On NPTEL pages, a compatibility script additionally prevents page-level clipboard blockers while preserving element-level listeners and ordinary keyboard handling.
@@ -94,7 +102,7 @@ On general websites, AI Gateway activates only when the page contains a credible
 3. Enable **Developer mode**.
 4. Click **Load unpacked**.
 5. Select the repository root—the directory containing `manifest.json`.
-6. Open the extension's **Settings** and add a Vercel AI Gateway API key.
+6. Open the extension's **Settings**, choose a provider, add its API key, and select a vision-capable model.
 
 ```bash
 git clone https://github.com/Kushalkhemka/ai-gateway-google-forms.git
@@ -118,9 +126,12 @@ Settings are stored in `chrome.storage.local` and are never committed to the rep
 
 | Setting | Default | Notes |
 |---|---|---|
-| Model | `google/gemini-3.7-flash` | Vision-capable model through Vercel AI Gateway |
+| Provider | Vercel AI Gateway | Also supports Google AI Studio, OpenRouter, and NVIDIA NIM |
+| Model | `google/gemini-3.7-flash` | Selector contains only verified image-input/text-output models |
 | Maximum images | `20` | Configurable from 10–30 |
 | Answer style | Natural student response | Customize tone and answer depth |
+
+Each provider has its own saved key and last-selected model. **Refresh models** retrieves the live catalog; if a key is missing or discovery is unavailable, the page clearly labels and uses a small verified fallback list.
 
 ### Request shape
 
@@ -137,10 +148,9 @@ No assessment URL or externally hosted image URL is sent for the model provider 
 
 ## Privacy and security
 
-- Your Vercel AI Gateway key stays in local Chrome extension storage.
+- Provider API keys stay in local Chrome extension storage and are never committed to this repository.
 - Form content leaves the browser only when you explicitly invoke autofill.
-- Requests go directly from the extension to Vercel AI Gateway.
-- Automatic provider routing improves availability during provider-specific outages.
+- Requests go directly to the provider selected in Settings. Vercel AI Gateway can automatically route between upstream providers; the three direct options do not.
 - The extension does not collect analytics, run a backend, or auto-submit forms.
 - Form text is treated as untrusted content and cannot change the response contract or request secrets.
 - General website support requires Chrome's **read and change data on all websites** permission so the content script can inspect quiz controls and retrieve cross-origin question images. It performs no extraction or AI request until you explicitly invoke Autofill.
@@ -161,7 +171,7 @@ The self-test verifies:
 - JavaScript syntax
 - Supported question-type markers
 - Multimodal inline-image handling
-- Automatic gateway routing
+- Provider adapters and vision-only catalog filtering
 - Keyboard shortcut listeners
 - Absence of committed API keys
 
@@ -169,7 +179,8 @@ The self-test verifies:
 
 ```text
 .
-├── background.js        # Gateway request, schema, image encoding, toolbar state
+├── background.js        # Provider requests, schema, image encoding, toolbar state
+├── provider-config.js   # Provider endpoints, model filters, catalog fallbacks
 ├── content.js           # Site adapters, keyboard shortcut, native/Ace autofill
 ├── nptel-clipboard.js   # Early NPTEL selection and clipboard compatibility
 ├── popup.*              # Compact extension action UI
@@ -182,7 +193,8 @@ The self-test verifies:
 
 ## Reliability notes
 
-- Vercel AI Gateway chooses an available provider automatically.
+- Vercel AI Gateway chooses an available upstream provider automatically; direct providers give you explicit routing and billing control.
+- Live catalogs are treated conservatively: models without positive evidence of image input are hidden.
 - Transient HTTP `502`, `503`, and `504` responses receive one delayed retry.
 - Images are resized only when large and encoded inline to avoid provider crawler restrictions.
 - Answers are mapped through generated IDs rather than question text, preventing collisions between similar questions.
@@ -199,7 +211,7 @@ Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for
 
 ## Acknowledgements
 
-The NPTEL clipboard compatibility approach was informed by [agrim-rai/unNPTEL](https://github.com/agrim-rai/unNPTEL). AI Gateway uses an independently scoped implementation that preserves non-clipboard keyboard handlers and avoids global pointer-event overrides.
+The NPTEL clipboard compatibility approach was informed by [agrim-rai/unNPTEL](https://github.com/agrim-rai/unNPTEL). Provider normalization patterns were informed by [tashfeenahmed/freellmapi](https://github.com/tashfeenahmed/freellmapi). AI Gateway uses independently scoped implementations and official provider APIs.
 
 ---
 

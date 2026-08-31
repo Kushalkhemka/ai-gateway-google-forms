@@ -1,10 +1,29 @@
-const GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions";
-const MODEL = "google/gemini-3.7-flash";
+importScripts("provider-config.js");
+
+const MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
+const modelCache = new Map();
 
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
-  const current = await chrome.storage.local.get(["model", "maxImages", "instructions"]);
+  const current = await chrome.storage.local.get([
+    "apiKey",
+    "provider",
+    "providerKeys",
+    "providerModels",
+    "model",
+    "maxImages",
+    "instructions"
+  ]);
+  const provider = AIProviderConfig.provider(current.provider).id;
+  const providerKeys = { ...(current.providerKeys || {}) };
+  if (current.apiKey && !providerKeys.vercel) providerKeys.vercel = current.apiKey;
+  const providerModels = { ...(current.providerModels || {}) };
+  if (current.model && !providerModels.vercel) providerModels.vercel = current.model;
+  if (!providerModels[provider]) providerModels[provider] = AIProviderConfig.provider(provider).defaultModel;
   await chrome.storage.local.set({
-    model: current.model || MODEL,
+    provider,
+    providerKeys,
+    providerModels,
+    model: providerModels[provider],
     maxImages: Number(current.maxImages) || 20,
     instructions:
       current.instructions ||
@@ -20,6 +39,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch(() => sendResponse({ ok: false }));
     return true;
   }
+  if (message?.type === "LIST_VISION_MODELS") {
+    listVisionModels(message.provider, message.apiKey)
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || "Could not load models." }));
+    return true;
+  }
   if (message?.type !== "SOLVE_FORM") return false;
   solveForm(message.payload)
     .then((result) => sendResponse({ ok: true, result }))
@@ -28,8 +53,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 async function solveForm(form) {
-  const settings = await chrome.storage.local.get(["apiKey", "model", "maxImages", "instructions"]);
-  if (!settings.apiKey?.trim()) throw new Error("Open AI Gateway settings and add a Vercel AI Gateway API key.");
+  const settings = await chrome.storage.local.get([
+    "provider",
+    "providerKeys",
+    "providerModels",
+    "model",
+    "maxImages",
+    "instructions"
+  ]);
+  const providerId = AIProviderConfig.provider(settings.provider).id;
+  const provider = AIProviderConfig.provider(providerId);
+  const apiKey = settings.providerKeys?.[providerId]?.trim();
+  const model = settings.providerModels?.[providerId] || settings.model || provider.defaultModel;
+  if (!apiKey) throw new Error(`Open AI Gateway settings and add a ${provider.label} API key.`);
   if (!Array.isArray(form?.questions) || !form.questions.length) {
     throw new Error("No supported questions were found on this assessment page.");
   }
@@ -49,58 +85,61 @@ async function solveForm(form) {
     });
   });
 
-  const requestBody = JSON.stringify({
-      model: settings.model || MODEL,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You solve structured practice assessments extracted from web pages. Follow the supplied output contract exactly. Never invent field IDs or option labels. For code fields, return complete executable source code only."
-        },
-        { role: "user", content }
-      ],
-      temperature: 0.2,
-      max_tokens: 12000,
-      stream: false,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "assessment_answers",
-          strict: true,
-          schema: answerSchema()
-        }
+  const requestBody = {
+    model,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You solve structured practice assessments extracted from web pages. Follow the supplied output contract exactly. Never invent field IDs or option labels. For code fields, return complete executable source code only."
+      },
+      { role: "user", content }
+    ],
+    temperature: 0.2,
+    max_tokens: 12000,
+    stream: false
+  };
+  if (provider.strictJsonSchema) {
+    requestBody.response_format = {
+      type: "json_schema",
+      json_schema: {
+        name: "assessment_answers",
+        strict: true,
+        schema: answerSchema()
       }
-    });
+    };
+  }
+  let request = AIProviderConfig.chatRequest(providerId, apiKey, requestBody);
 
   let response;
   let bodyText = "";
   let body = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    response = await fetch(GATEWAY_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${settings.apiKey.trim()}`,
-        "Content-Type": "application/json"
-      },
-      body: requestBody
-    });
+    response = await fetch(request.url, request.options);
     bodyText = await response.text();
     try {
       body = JSON.parse(bodyText);
     } catch {
       body = null;
     }
+    const detail = body?.error?.message || body?.message || bodyText.slice(0, 300);
+    if (!response.ok && response.status === 400 && requestBody.response_format && attempt === 0 && /response.format|json.schema|structured/i.test(detail)) {
+      delete requestBody.response_format;
+      request = AIProviderConfig.chatRequest(providerId, apiKey, requestBody);
+      continue;
+    }
     if (response.ok || ![502, 503, 504].includes(response.status) || attempt === 1) break;
     await new Promise((resolve) => setTimeout(resolve, 900));
   }
   if (!response.ok) {
     const detail = body?.error?.message || body?.message || bodyText.slice(0, 300);
-    const error = new Error(`AI Gateway request failed (${response.status}): ${detail}`);
+    const error = new Error(`${provider.label} request failed (${response.status}): ${detail}`);
     error.status = response.status;
+    error.providerId = providerId;
     throw error;
   }
 
-  const raw = body?.choices?.[0]?.message?.content;
+  const raw = assistantContent(body?.choices?.[0]?.message?.content);
   const parsed = parseAssistantJson(raw);
   if (!Array.isArray(parsed.answers)) throw new Error("The model returned an invalid answer payload.");
 
@@ -109,9 +148,50 @@ async function solveForm(form) {
   return {
     answers: parsed.answers,
     imageCount: inlinedImages.length,
-    model: settings.model || MODEL,
-    provider: "automatic"
+    model,
+    provider: providerId
   };
+}
+
+async function listVisionModels(providerId, apiKey) {
+  const selectedId = AIProviderConfig.provider(providerId).id;
+  const provider = AIProviderConfig.provider(selectedId);
+  const fallback = AIProviderConfig.fallbackVisionModels(selectedId);
+  if (provider.modelsRequireKey && !apiKey?.trim()) {
+    return { models: fallback, source: "fallback", warning: `Add a ${provider.label} key to load its live vision-model catalog.` };
+  }
+
+  const cached = modelCache.get(selectedId);
+  if (cached && Date.now() - cached.timestamp < MODEL_CACHE_TTL_MS) {
+    return { models: cached.models, source: "live" };
+  }
+
+  const request = AIProviderConfig.modelListRequest(selectedId, apiKey);
+  let response;
+  try {
+    response = await fetch(request.url, request.options);
+  } catch (error) {
+    return { models: fallback, source: "fallback", warning: `${provider.label} model discovery failed: ${error.message}` };
+  }
+  const text = await response.text();
+  let payload;
+  try { payload = JSON.parse(text); } catch { payload = null; }
+  if (!response.ok) {
+    const detail = payload?.error?.message || payload?.message || text.slice(0, 180);
+    return { models: fallback, source: "fallback", warning: `${provider.label} model discovery failed (${response.status}): ${detail}` };
+  }
+  const models = AIProviderConfig.normalizeVisionModels(selectedId, payload);
+  if (!models.length) {
+    return { models: fallback, source: "fallback", warning: `${provider.label} returned no verified vision-capable chat models.` };
+  }
+  modelCache.set(selectedId, { timestamp: Date.now(), models });
+  return { models, source: "live" };
+}
+
+function assistantContent(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return content;
+  return content.map((part) => typeof part === "string" ? part : part?.text || "").join("\n");
 }
 
 async function inlineImages(images) {
@@ -244,7 +324,10 @@ ${imageLegend}
 FORM DATA
 ${JSON.stringify(formForModel, null, 2)}
 
-Return only the JSON object required by the schema.`;
+OUTPUT CONTRACT
+Return exactly one JSON object in this shape, without Markdown or commentary:
+{"answers":[{"fieldId":"field ID copied from FORM DATA","action":"fill","values":["answer value"]}]}
+For skipped fields, use action "skip" and an empty values array. Include no other top-level or answer properties.`;
 }
 
 function answerSchema() {
@@ -285,8 +368,9 @@ function parseAssistantJson(raw) {
 }
 
 function friendlyError(error) {
-  if (error?.status === 401 || error?.status === 403) return "The Vercel AI Gateway key was rejected. Check it in AI Gateway settings.";
-  if (error?.status === 402) return "The Vercel AI Gateway budget or credits are exhausted.";
-  if (error?.status === 429) return "Vercel AI Gateway is rate limiting requests. Wait briefly and try again.";
+  const provider = AIProviderConfig.provider(error?.providerId);
+  if (error?.status === 401 || error?.status === 403) return `The ${provider.label} key was rejected. Check it in AI Gateway settings.`;
+  if (error?.status === 402) return `${provider.label} reports that credits or budget are exhausted.`;
+  if (error?.status === 429) return `${provider.label} is rate limiting requests. Wait briefly and try again.`;
   return error?.message || "Unexpected extension error.";
 }

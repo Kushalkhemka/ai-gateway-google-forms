@@ -13,15 +13,23 @@ initialize();
 async function initialize() {
   const [{ id, url } = {}] = await chrome.tabs.query({ active: true, currentWindow: true });
   activeTabId = id;
-  const settings = await chrome.storage.local.get(["apiKey", "model"]);
-  modelText.textContent = settings.model || "google/gemini-3.7-flash";
+  const settings = await chrome.storage.local.get([
+    "provider", "providerKeys", "providerModels", "apiKey", "model"
+  ]);
+  const provider = AIProviderConfig.provider(settings.provider);
+  const providerKeys = { ...(settings.providerKeys || {}) };
+  const providerModels = { ...(settings.providerModels || {}) };
+  if (settings.apiKey && !providerKeys.vercel) providerKeys.vercel = settings.apiKey;
+  if (settings.model && !providerModels.vercel) providerModels.vercel = settings.model;
+  const selectedModel = providerModels[provider.id] || provider.defaultModel;
+  modelText.textContent = `${provider.label} · ${selectedModel}`;
 
   if (!isSupportedUrl(url)) {
     setStatus("Open a supported assessment page.", "error");
     return;
   }
-  if (!settings.apiKey) {
-    setStatus("Add your Vercel AI Gateway key in Settings.", "error");
+  if (!providerKeys[provider.id]) {
+    setStatus(`Add your ${provider.label} API key in Settings.`, "error");
     return;
   }
 

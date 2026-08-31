@@ -9,19 +9,30 @@
   <body>
     <main>
       <div class="eyebrow">AI GATEWAY</div>
-      <h1>Settings</h1>
-      <p class="intro">Connect Vercel AI Gateway and tune how practice-test answers are written.</p>
+      <h1>Provider settings</h1>
+      <p class="intro">Choose where quiz requests run, then select only from models verified for image input and text output.</p>
 
       <form id="form">
-        <label for="apiKey">Vercel AI Gateway API key</label>
+        <label for="provider">AI provider</label>
+        <select id="provider" name="provider" required></select>
+        <p id="providerDescription" class="help provider-description"></p>
+
+        <div class="label-row">
+          <label id="apiKeyLabel" for="apiKey">API key</label>
+          <a id="apiKeyLink" href="#" target="_blank" rel="noreferrer">Get a key ↗</a>
+        </div>
         <div class="secret-row">
-          <input id="apiKey" name="apiKey" type="password" autocomplete="off" placeholder="vck_…" required />
+          <input id="apiKey" name="apiKey" type="password" autocomplete="off" required />
           <button id="toggle" type="button" class="secondary">Show</button>
         </div>
-        <p class="help">Stored only in Chrome extension storage on this browser. It is never included in the extension files.</p>
+        <p class="help">Each provider key is stored separately in Chrome extension storage on this browser.</p>
 
-        <label for="model">Model</label>
-        <input id="model" name="model" value="google/gemini-3.7-flash" readonly />
+        <div class="label-row model-label-row">
+          <label for="model">Vision-capable model</label>
+          <button id="refreshModels" type="button" class="text-button">Refresh models</button>
+        </div>
+        <select id="model" name="model" required></select>
+        <p id="modelStatus" class="help" role="status">Loading models…</p>
 
         <label for="maxImages">Maximum images per assessment</label>
         <input id="maxImages" name="maxImages" type="number" min="10" max="30" step="1" value="20" />
@@ -38,9 +49,10 @@
 
       <aside>
         <strong>Privacy note</strong>
-        <p>Only when you press Autofill, detected questions, code context, and question images are sent to Vercel AI Gateway using automatic provider routing. AI Gateway never clicks Compile, Run, Save, or Submit.</p>
+        <p>Only when you press Autofill, detected questions, code context, and question images are sent to your selected provider. AI Gateway never clicks Compile, Run, Save, or Submit.</p>
       </aside>
     </main>
+    <script src="provider-config.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

@@ -26,6 +26,7 @@ for (const file of javascript) {
 }
 
 const background = await readFile(path.join(root, "background.js"), "utf8");
+const providerSource = await readFile(path.join(root, "provider-config.js"), "utf8");
 const content = await readFile(path.join(root, "content.js"), "utf8");
 const clipboard = await readFile(path.join(root, "nptel-clipboard.js"), "utf8");
 const genericFixture = await readFile(path.join(root, "tests/fixtures/generic-quiz.html"), "utf8");
@@ -33,9 +34,11 @@ const allSource = await Promise.all(
   (await readdir(root)).filter((name) => /\.(?:js|json|html|md)$/.test(name)).map((name) => readFile(path.join(root, name), "utf8"))
 );
 
-assert.match(background, /google\/gemini-3\.7-flash/);
+assert.match(background, /LIST_VISION_MODELS/);
+assert.match(background, /AIProviderConfig\.chatRequest/);
 assert.doesNotMatch(background, /providerOptions/);
 assert.match(background, /response_format/);
+assert.match(background, /delete requestBody\.response_format/);
 assert.match(background, /Math\.max\(10,/);
 assert.match(background, /inlineImages/);
 assert.match(background, /base64/);
@@ -59,7 +62,56 @@ assert.match(clipboard, /clipboardEvents/);
 assert.match(clipboard, /isClipboardShortcut/);
 assert.match(clipboard, /user-select: text !important/);
 assert.doesNotMatch(clipboard, /pointer-events:\s*auto/);
-assert.ok(!allSource.join("\n").match(/(?:vck_|llmgtwy_)[A-Za-z0-9_-]{20,}/), "An API key appears to be committed in source");
+assert.ok(!allSource.join("\n").match(/(?:vck_|llmgtwy_|sk-or-v1-|nvapi-|AIza)[A-Za-z0-9_-]{20,}/), "An API key appears to be committed in source");
+
+const providerSandbox = {};
+runInNewContext(providerSource, providerSandbox);
+const providers = providerSandbox.AIProviderConfig;
+assert.deepEqual(Array.from(Object.keys(providers.definitions)), ["vercel", "google", "openrouter", "nvidia"]);
+
+const vercelModels = providers.normalizeVisionModels("vercel", {
+  data: [
+    { id: "text-only", type: "language", modalities: { input: ["text"], output: ["text"] } },
+    { id: "vision-model", name: "Vision Model", type: "language", modalities: { input: ["text", "image"], output: ["text"] } }
+  ]
+});
+assert.deepEqual(Array.from(vercelModels, (entry) => entry.id), ["vision-model"]);
+
+const openRouterModels = providers.normalizeVisionModels("openrouter", {
+  data: [
+    {
+      id: "free/vision",
+      name: "Free Vision",
+      architecture: { input_modalities: ["text", "image"], output_modalities: ["text"] },
+      pricing: { prompt: "0", completion: "0" }
+    },
+    { id: "audio-only", architecture: { input_modalities: ["audio"], output_modalities: ["text"] } }
+  ]
+});
+assert.equal(openRouterModels.length, 1);
+assert.equal(openRouterModels[0].free, true);
+
+const googleModels = providers.normalizeVisionModels("google", {
+  models: [
+    { name: "models/gemini-3.7-flash", displayName: "Gemini 3.7 Flash", supportedGenerationMethods: ["generateContent"], inputTokenLimit: 1000000 },
+    { name: "models/gemini-pro", supportedGenerationMethods: ["generateContent"] },
+    { name: "models/text-embedding-004", supportedGenerationMethods: ["embedContent"] }
+  ]
+});
+assert.deepEqual(Array.from(googleModels, (entry) => entry.id), ["gemini-3.7-flash"]);
+
+const nvidiaModels = providers.normalizeVisionModels("nvidia", {
+  data: [
+    { id: "meta/llama-3.2-11b-vision-instruct" },
+    { id: "unknown/text-model" }
+  ]
+});
+assert.deepEqual(Array.from(nvidiaModels, (entry) => entry.id), ["meta/llama-3.2-11b-vision-instruct"]);
+
+const requestBody = { model: "example", messages: [] };
+assert.equal(providers.chatRequest("google", "test-key", requestBody).url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+assert.equal(providers.chatRequest("openrouter", "test-key", requestBody).options.headers["HTTP-Referer"], "https://github.com/Kushalkhemka/ai-gateway-google-forms");
+assert.equal(providers.chatRequest("nvidia", "test-key", requestBody).url, "https://integrate.api.nvidia.com/v1/chat/completions");
 
 class FakeEventTarget {
   constructor() { this.listeners = new Map(); }
