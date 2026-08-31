@@ -2,7 +2,7 @@
   <img src="assets/ai-gateway-mark.svg" width="112" alt="AI Gateway logo" />
   <h1>AI Gateway for Web Quizzes</h1>
   <p><strong>One prompt. Every question. A review-ready assessment.</strong></p>
-  <p>A privacy-conscious Chrome extension that understands MCQ forms across the web, with specialized support for Google Forms and NPTEL—including images, grids, subjective answers, and programming problems.</p>
+  <p>A privacy-conscious Chrome extension that understands MCQ forms across the web, with provider options for Vercel AI Gateway, Google Gemini, and OpenAI—including images, grids, subjective answers, and programming problems.</p>
   <p>
     <img alt="Manifest V3" src="https://img.shields.io/badge/Manifest-V3-111111?style=flat-square&amp;logo=googlechrome&amp;logoColor=white" />
     <img alt="JavaScript" src="https://img.shields.io/badge/JavaScript-Vanilla-111111?style=flat-square&amp;logo=javascript&amp;logoColor=white" />
@@ -66,10 +66,10 @@ flowchart LR
     C3 --> C
     C2 --> K[Programming context<br/>language + starter + samples]
     C --> D[Inline image encoder<br/>base64 + imageRefs]
-    C --> E[Vercel AI Gateway]
+    C --> E[Selected provider adapter]
     K --> E
     D --> E
-    E --> F[Gemini 3.7 Flash]
+    E --> F[Vercel AI Gateway<br/>Google Gemini<br/>OpenAI]
     F --> G[Strict JSON answer plan]
     G --> H[ID validation]
     H --> I[Native DOM events]
@@ -79,7 +79,7 @@ flowchart LR
 1. The content script selects Google Forms, NPTEL, or generic web extraction; specialized adapters take priority.
 2. Every field receives a stable request-local ID. Choice labels are preserved verbatim.
 3. Up to 20 images by default are downloaded, optimized when necessary, and attached inline with exact `imageRefs`.
-4. Vercel AI Gateway sends one structured multimodal request to `google/gemini-3.7-flash` using automatic provider routing.
+4. The selected provider sends one structured multimodal request using its own request format.
 5. The response must satisfy a strict JSON schema. Unknown field IDs are discarded.
 6. The extension fills native controls and Ace Editor while leaving every submit/compile action to the user.
 
@@ -94,7 +94,7 @@ On general websites, AI Gateway activates only when the page contains a credible
 3. Enable **Developer mode**.
 4. Click **Load unpacked**.
 5. Select the repository root—the directory containing `manifest.json`.
-6. Open the extension's **Settings** and add a Vercel AI Gateway API key.
+6. Open the extension's **Settings**, choose a provider, and add that provider's API key.
 
 ```bash
 git clone https://github.com/Kushalkhemka/ai-gateway-google-forms.git
@@ -118,13 +118,15 @@ Settings are stored in `chrome.storage.local` and are never committed to the rep
 
 | Setting | Default | Notes |
 |---|---|---|
-| Model | `google/gemini-3.7-flash` | Vision-capable model through Vercel AI Gateway |
+| Provider | `Vercel AI Gateway` | Can also call Google Gemini or OpenAI directly |
+| API key | Empty | Stored per provider in Chrome extension storage |
+| Model | Provider default | Vercel: `google/gemini-3.7-flash`; Gemini: `gemini-3.7-flash`; OpenAI: `gpt-5.6` |
 | Maximum images | `20` | Configurable from 10–30 |
 | Answer style | Natural student response | Customize tone and answer depth |
 
 ### Request shape
 
-The gateway receives:
+The selected provider receives:
 
 - Form title and description
 - Ordered questions and stable field IDs
@@ -137,10 +139,10 @@ No assessment URL or externally hosted image URL is sent for the model provider 
 
 ## Privacy and security
 
-- Your Vercel AI Gateway key stays in local Chrome extension storage.
+- Your provider API keys stay in local Chrome extension storage.
 - Form content leaves the browser only when you explicitly invoke autofill.
-- Requests go directly from the extension to Vercel AI Gateway.
-- Automatic provider routing improves availability during provider-specific outages.
+- Requests go directly from the extension to the selected provider.
+- Vercel AI Gateway automatic routing is still available when Vercel is selected.
 - The extension does not collect analytics, run a backend, or auto-submit forms.
 - Form text is treated as untrusted content and cannot change the response contract or request secrets.
 - General website support requires Chrome's **read and change data on all websites** permission so the content script can inspect quiz controls and retrieve cross-origin question images. It performs no extraction or AI request until you explicitly invoke Autofill.
@@ -161,7 +163,7 @@ The self-test verifies:
 - JavaScript syntax
 - Supported question-type markers
 - Multimodal inline-image handling
-- Automatic gateway routing
+- Provider routing
 - Keyboard shortcut listeners
 - Absence of committed API keys
 
@@ -169,12 +171,12 @@ The self-test verifies:
 
 ```text
 .
-├── background.js        # Gateway request, schema, image encoding, toolbar state
+├── background.js        # Provider requests, schema, image encoding, toolbar state
 ├── content.js           # Site adapters, keyboard shortcut, native/Ace autofill
 ├── nptel-clipboard.js   # Early NPTEL selection and clipboard compatibility
 ├── popup.*              # Compact extension action UI
 ├── options.*            # Local settings UI
-├── icons/               # Runtime extension icons (Vercel integration)
+├── icons/               # Runtime extension icons
 ├── assets/              # Repository-only original branding
 ├── tests/selftest.mjs   # Zero-dependency validation
 └── manifest.json        # Chrome Manifest V3 definition
@@ -182,7 +184,9 @@ The self-test verifies:
 
 ## Reliability notes
 
-- Vercel AI Gateway chooses an available provider automatically.
+- Vercel AI Gateway chooses an available provider automatically when selected.
+- Direct Gemini and OpenAI modes use provider-specific structured-output APIs.
+- Direct OpenAI mode avoids optional sampling parameters and retries without unsupported optional fields for broader model compatibility.
 - Transient HTTP `502`, `503`, and `504` responses receive one delayed retry.
 - Images are resized only when large and encoded inline to avoid provider crawler restrictions.
 - Answers are mapped through generated IDs rather than question text, preventing collisions between similar questions.

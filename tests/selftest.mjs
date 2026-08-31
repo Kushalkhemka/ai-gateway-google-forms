@@ -28,18 +28,33 @@ for (const file of javascript) {
 const background = await readFile(path.join(root, "background.js"), "utf8");
 const content = await readFile(path.join(root, "content.js"), "utf8");
 const clipboard = await readFile(path.join(root, "nptel-clipboard.js"), "utf8");
+const optionsPage = await readFile(path.join(root, "options.html"), "utf8");
+const optionsScript = await readFile(path.join(root, "options.js"), "utf8");
+const popupScript = await readFile(path.join(root, "popup.js"), "utf8");
 const genericFixture = await readFile(path.join(root, "tests/fixtures/generic-quiz.html"), "utf8");
 const allSource = await Promise.all(
   (await readdir(root)).filter((name) => /\.(?:js|json|html|md)$/.test(name)).map((name) => readFile(path.join(root, name), "utf8"))
 );
 
 assert.match(background, /google\/gemini-3\.7-flash/);
+assert.match(background, /api\.openai\.com\/v1\/responses/);
+assert.match(background, /generativelanguage\.googleapis\.com\/v1beta\/models/);
+assert.match(background, /responseJsonSchema/);
+assert.match(background, /input_image/);
+assert.match(background, /selectedProviderSettings/);
+assert.match(background, /postOpenAIWithCompatibility/);
+assert.match(background, /unsupportedOpenAIParameter/);
 assert.doesNotMatch(background, /providerOptions/);
 assert.match(background, /response_format/);
 assert.match(background, /Math\.max\(10,/);
 assert.match(background, /inlineImages/);
 assert.match(background, /base64/);
 assert.match(background, /dataUrl/);
+const openAISection = background.slice(
+  background.indexOf("async function requestOpenAIAnswers"),
+  background.indexOf("async function requestGeminiAnswers")
+);
+assert.doesNotMatch(openAISection, /temperature/, "OpenAI Responses requests should not send temperature; some model families reject it.");
 for (const fieldType of ["short_text", "paragraph", "radio", "checkbox", "dropdown", "date", "time", "code", "file_upload"]) {
   assert.ok(content.includes(`"${fieldType}"`), `Missing support marker for ${fieldType}`);
 }
@@ -59,6 +74,11 @@ assert.match(clipboard, /clipboardEvents/);
 assert.match(clipboard, /isClipboardShortcut/);
 assert.match(clipboard, /user-select: text !important/);
 assert.doesNotMatch(clipboard, /pointer-events:\s*auto/);
+for (const provider of ["vercel", "gemini", "openai"]) {
+  assert.match(optionsPage, new RegExp(`value="${provider}"`));
+  assert.match(optionsScript, new RegExp(`${provider}:`));
+  assert.match(popupScript, new RegExp(`${provider}:`));
+}
 assert.ok(!allSource.join("\n").match(/(?:vck_|llmgtwy_)[A-Za-z0-9_-]{20,}/), "An API key appears to be committed in source");
 
 class FakeEventTarget {

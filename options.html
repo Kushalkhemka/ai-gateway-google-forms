@@ -10,18 +10,27 @@
     <main>
       <div class="eyebrow">AI GATEWAY</div>
       <h1>Settings</h1>
-      <p class="intro">Connect Vercel AI Gateway and tune how practice-test answers are written.</p>
+      <p class="intro">Choose an AI provider and tune how practice-test answers are written.</p>
 
       <form id="form">
-        <label for="apiKey">Vercel AI Gateway API key</label>
+        <label for="provider">AI provider</label>
+        <select id="provider" name="provider">
+          <option value="vercel">Vercel AI Gateway</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="openai">OpenAI</option>
+        </select>
+        <p id="providerHelp" class="help"></p>
+
+        <label id="apiKeyLabel" for="apiKey">API key</label>
         <div class="secret-row">
-          <input id="apiKey" name="apiKey" type="password" autocomplete="off" placeholder="vck_…" required />
+          <input id="apiKey" name="apiKey" type="password" autocomplete="off" required />
           <button id="toggle" type="button" class="secondary">Show</button>
         </div>
-        <p class="help">Stored only in Chrome extension storage on this browser. It is never included in the extension files.</p>
+        <p id="apiKeyHelp" class="help">Stored only in Chrome extension storage on this browser. It is never included in the extension files.</p>
 
         <label for="model">Model</label>
-        <input id="model" name="model" value="google/gemini-3.7-flash" readonly />
+        <input id="model" name="model" />
+        <p id="modelHelp" class="help"></p>
 
         <label for="maxImages">Maximum images per assessment</label>
         <input id="maxImages" name="maxImages" type="number" min="10" max="30" step="1" value="20" />
@@ -38,7 +47,7 @@
 
       <aside>
         <strong>Privacy note</strong>
-        <p>Only when you press Autofill, detected questions, code context, and question images are sent to Vercel AI Gateway using automatic provider routing. AI Gateway never clicks Compile, Run, Save, or Submit.</p>
+        <p>Only when you press Autofill, detected questions, code context, and question images are sent to the selected provider. AI Gateway never clicks Compile, Run, Save, or Submit.</p>
       </aside>
     </main>
     <script src="options.js"></script>

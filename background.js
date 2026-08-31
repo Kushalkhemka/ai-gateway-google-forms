@@ -1,10 +1,36 @@
-const GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions";
-const MODEL = "google/gemini-3.7-flash";
+const PROVIDERS = {
+  vercel: {
+    label: "Vercel AI Gateway",
+    defaultModel: "google/gemini-3.7-flash"
+  },
+  gemini: {
+    label: "Google Gemini",
+    defaultModel: "gemini-3.7-flash"
+  },
+  openai: {
+    label: "OpenAI",
+    defaultModel: "gpt-5.6"
+  }
+};
+
+const DEFAULT_PROVIDER = "vercel";
+const VERCEL_URL = "https://ai-gateway.vercel.sh/v1/chat/completions";
+const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
-  const current = await chrome.storage.local.get(["model", "maxImages", "instructions"]);
+  const current = await chrome.storage.local.get(["provider", "apiKey", "apiKeys", "model", "models", "maxImages", "instructions"]);
+  const provider = normalizeProvider(current.provider);
+  const apiKeys = normalizedRecord(current.apiKeys);
+  const models = normalizedRecord(current.models);
+  if (!apiKeys[provider] && current.apiKey) apiKeys[provider] = current.apiKey;
+  if (!models[provider] && current.model) models[provider] = current.model;
+
   await chrome.storage.local.set({
-    model: current.model || MODEL,
+    provider,
+    apiKey: apiKeys[provider] || "",
+    apiKeys,
+    model: models[provider] || PROVIDERS[provider].defaultModel,
+    models,
     maxImages: Number(current.maxImages) || 20,
     instructions:
       current.instructions ||
@@ -27,9 +53,41 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
+function normalizedRecord(value) {
+  const result = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return result;
+  for (const key of Object.keys(PROVIDERS)) {
+    if (typeof value[key] === "string") result[key] = value[key].trim();
+  }
+  return result;
+}
+
+function normalizeProvider(provider) {
+  return Object.prototype.hasOwnProperty.call(PROVIDERS, provider) ? provider : DEFAULT_PROVIDER;
+}
+
+function selectedProviderSettings(settings) {
+  const provider = normalizeProvider(settings.provider);
+  const apiKeys = normalizedRecord(settings.apiKeys);
+  const models = normalizedRecord(settings.models);
+  const hasProviderKeys = settings.apiKeys && typeof settings.apiKeys === "object" && !Array.isArray(settings.apiKeys);
+  return {
+    provider,
+    apiKey: String(apiKeys[provider] || (!hasProviderKeys && provider === DEFAULT_PROVIDER ? settings.apiKey : "") || "").trim(),
+    model: String(models[provider] || settings.model || PROVIDERS[provider].defaultModel).trim() || PROVIDERS[provider].defaultModel
+  };
+}
+
+function systemInstruction() {
+  return "You solve structured practice assessments extracted from web pages. Follow the supplied output contract exactly. Never invent field IDs or option labels. For code fields, return complete executable source code only.";
+}
+
 async function solveForm(form) {
-  const settings = await chrome.storage.local.get(["apiKey", "model", "maxImages", "instructions"]);
-  if (!settings.apiKey?.trim()) throw new Error("Open AI Gateway settings and add a Vercel AI Gateway API key.");
+  const settings = await chrome.storage.local.get(["provider", "apiKey", "apiKeys", "model", "models", "maxImages", "instructions"]);
+  const providerSettings = selectedProviderSettings(settings);
+  if (!providerSettings.apiKey) {
+    throw new Error(`Open AI Gateway settings and add a ${PROVIDERS[providerSettings.provider].label} API key.`);
+  }
   if (!Array.isArray(form?.questions) || !form.questions.length) {
     throw new Error("No supported questions were found on this assessment page.");
   }
@@ -37,7 +95,27 @@ async function solveForm(form) {
   const maxImages = Math.max(10, Math.min(30, Number(settings.maxImages) || 20));
   const selectedImages = (form.images || []).slice(0, maxImages);
   const inlinedImages = await inlineImages(selectedImages);
-  const content = [{ type: "text", text: buildPrompt(form, settings.instructions, inlinedImages) }];
+  const prompt = buildPrompt(form, settings.instructions, inlinedImages);
+  const result = await requestAnswers(providerSettings, prompt, inlinedImages);
+
+  const validIds = new Set(form.questions.flatMap((q) => q.fields.map((field) => field.id)));
+  result.answers = result.answers.filter((answer) => validIds.has(answer.fieldId));
+  return {
+    answers: result.answers,
+    imageCount: inlinedImages.length,
+    model: providerSettings.model,
+    provider: providerSettings.provider
+  };
+}
+
+async function requestAnswers(settings, prompt, inlinedImages) {
+  if (settings.provider === "gemini") return requestGeminiAnswers(settings, prompt, inlinedImages);
+  if (settings.provider === "openai") return requestOpenAIAnswers(settings, prompt, inlinedImages);
+  return requestVercelAnswers(settings, prompt, inlinedImages);
+}
+
+async function requestVercelAnswers(settings, prompt, inlinedImages) {
+  const content = [{ type: "text", text: prompt }];
   inlinedImages.forEach((image, index) => {
     content.push({
       type: "text",
@@ -50,12 +128,11 @@ async function solveForm(form) {
   });
 
   const requestBody = JSON.stringify({
-      model: settings.model || MODEL,
+      model: settings.model,
       messages: [
         {
           role: "system",
-          content:
-            "You solve structured practice assessments extracted from web pages. Follow the supplied output contract exactly. Never invent field IDs or option labels. For code fields, return complete executable source code only."
+          content: systemInstruction()
         },
         { role: "user", content }
       ],
@@ -76,10 +153,10 @@ async function solveForm(form) {
   let bodyText = "";
   let body = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    response = await fetch(GATEWAY_URL, {
+    response = await fetch(VERCEL_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${settings.apiKey.trim()}`,
+        Authorization: `Bearer ${settings.apiKey}`,
         "Content-Type": "application/json"
       },
       body: requestBody
@@ -93,25 +170,192 @@ async function solveForm(form) {
     if (response.ok || ![502, 503, 504].includes(response.status) || attempt === 1) break;
     await new Promise((resolve) => setTimeout(resolve, 900));
   }
-  if (!response.ok) {
-    const detail = body?.error?.message || body?.message || bodyText.slice(0, 300);
-    const error = new Error(`AI Gateway request failed (${response.status}): ${detail}`);
-    error.status = response.status;
-    throw error;
-  }
+  if (!response.ok) throw providerHttpError(settings.provider, response.status, body, bodyText);
 
   const raw = body?.choices?.[0]?.message?.content;
+  return parseAnswerPayload(raw);
+}
+
+async function requestOpenAIAnswers(settings, prompt, inlinedImages) {
+  const content = [{ type: "input_text", text: prompt }];
+  inlinedImages.forEach((image, index) => {
+    content.push({
+      type: "input_text",
+      text: `Attached image ${index + 1}. Reference: ${image.ref}. Alt text: ${image.alt || "none"}. Use it only for the question whose imageRefs contains this exact reference.`
+    });
+    content.push({
+      type: "input_image",
+      image_url: image.dataUrl,
+      detail: "high"
+    });
+  });
+
+  const requestPayload = {
+    model: settings.model,
+    instructions: systemInstruction(),
+    input: [
+      {
+        role: "user",
+        content
+      }
+    ],
+    text: {
+      format: {
+        type: "json_schema",
+        name: "assessment_answers",
+        strict: true,
+        schema: answerSchema()
+      }
+    },
+    max_output_tokens: 12000,
+    store: false
+  };
+
+  const { body, response, bodyText } = await postOpenAIWithCompatibility(settings, requestPayload);
+  if (!response.ok) throw providerHttpError(settings.provider, response.status, body, bodyText);
+
+  const raw = extractOpenAIResponseText(body);
+  return parseAnswerPayload(raw);
+}
+
+async function postOpenAIWithCompatibility(settings, payload) {
+  let currentPayload = { ...payload };
+  let lastResult = null;
+  const removedParams = new Set();
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    lastResult = await postJsonWithRetry(OPENAI_RESPONSES_URL, {
+      Authorization: `Bearer ${settings.apiKey}`,
+      "Content-Type": "application/json"
+    }, JSON.stringify(currentPayload), settings.provider);
+
+    if (lastResult.response.ok) return lastResult;
+
+    const param = unsupportedOpenAIParameter(lastResult.body, lastResult.bodyText);
+    if (!param || removedParams.has(param) || !Object.prototype.hasOwnProperty.call(currentPayload, param)) {
+      return lastResult;
+    }
+
+    removedParams.add(param);
+    currentPayload = { ...currentPayload };
+    delete currentPayload[param];
+  }
+
+  return lastResult;
+}
+
+async function requestGeminiAnswers(settings, prompt, inlinedImages) {
+  const parts = [{ text: prompt }];
+  inlinedImages.forEach((image, index) => {
+    const inlineData = dataUrlToGeminiInlineData(image.dataUrl);
+    parts.push({
+      text: `Attached image ${index + 1}. Reference: ${image.ref}. Alt text: ${image.alt || "none"}. Use it only for the question whose imageRefs contains this exact reference.`
+    });
+    parts.push({ inlineData });
+  });
+
+  const modelName = String(settings.model || PROVIDERS.gemini.defaultModel).trim().replace(/^models\//i, "");
+  const requestBody = JSON.stringify({
+    contents: [{ role: "user", parts }],
+    systemInstruction: {
+      parts: [{ text: systemInstruction() }]
+    },
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseJsonSchema: answerSchema(),
+      temperature: 0.2,
+      maxOutputTokens: 12000
+    }
+  });
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(settings.apiKey)}`;
+  const { body, response, bodyText } = await postJsonWithRetry(url, {
+    "Content-Type": "application/json"
+  }, requestBody, settings.provider);
+  if (!response.ok) throw providerHttpError(settings.provider, response.status, body, bodyText);
+
+  const raw = extractGeminiResponseText(body);
+  return parseAnswerPayload(raw);
+}
+
+async function postJsonWithRetry(url, headers, body, provider) {
+  let response;
+  let bodyText = "";
+  let parsedBody = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    response = await fetch(url, {
+      method: "POST",
+      headers,
+      body
+    });
+    bodyText = await response.text();
+    try {
+      parsedBody = JSON.parse(bodyText);
+    } catch {
+      parsedBody = null;
+    }
+    if (response.ok || ![502, 503, 504].includes(response.status) || attempt === 1) break;
+    await new Promise((resolve) => setTimeout(resolve, 900));
+  }
+  return { body: parsedBody, response, bodyText, provider };
+}
+
+function parseAnswerPayload(raw) {
   const parsed = parseAssistantJson(raw);
   if (!Array.isArray(parsed.answers)) throw new Error("The model returned an invalid answer payload.");
+  return { answers: parsed.answers };
+}
 
-  const validIds = new Set(form.questions.flatMap((q) => q.fields.map((field) => field.id)));
-  parsed.answers = parsed.answers.filter((answer) => validIds.has(answer.fieldId));
-  return {
-    answers: parsed.answers,
-    imageCount: inlinedImages.length,
-    model: settings.model || MODEL,
-    provider: "automatic"
-  };
+function dataUrlToGeminiInlineData(dataUrl) {
+  const separator = String(dataUrl || "").indexOf(",");
+  if (separator < 0) throw new Error("Could not parse inline image data for Gemini.");
+  const meta = dataUrl.slice(0, separator);
+  const data = dataUrl.slice(separator + 1);
+  if (!/^data:/i.test(meta) || !/;base64/i.test(meta) || !data) {
+    throw new Error("Gemini requires question images as base64 data URLs.");
+  }
+  const mimeType = /^data:([^;]+)/i.exec(meta)?.[1] || "image/jpeg";
+  return { mimeType, data };
+}
+
+function extractOpenAIResponseText(body) {
+  if (typeof body?.output_text === "string") return body.output_text;
+  const textParts = [];
+  for (const item of Array.isArray(body?.output) ? body.output : []) {
+    if (typeof item?.content === "string") textParts.push(item.content);
+    for (const part of Array.isArray(item?.content) ? item.content : []) {
+      if (part?.parsed && typeof part.parsed === "object") return part.parsed;
+      if (typeof part?.text === "string") textParts.push(part.text);
+      if (typeof part?.output_text === "string") textParts.push(part.output_text);
+    }
+  }
+  return textParts.join("\n");
+}
+
+function extractGeminiResponseText(body) {
+  const candidate = Array.isArray(body?.candidates) ? body.candidates[0] : null;
+  const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+  const text = parts.map((part) => part?.text || "").join("\n").trim();
+  if (text) return text;
+  if (candidate?.finishReason) throw new Error(`Gemini returned no answer text (${candidate.finishReason}).`);
+  throw new Error("Gemini returned no answer text.");
+}
+
+function unsupportedOpenAIParameter(body, bodyText) {
+  const message = String(body?.error?.message || body?.message || bodyText || "");
+  const unsupported = /unsupported parameter:\s*['"]?([A-Za-z0-9_.-]+)['"]?/i.exec(message)?.[1];
+  const param = unsupported || (body?.error?.type === "invalid_request_error" ? body?.error?.param : "");
+  if (!param) return "";
+  return String(param).split(".")[0].split("[")[0];
+}
+
+function providerHttpError(provider, status, body, bodyText) {
+  const safeProvider = normalizeProvider(provider);
+  const detail = body?.error?.message || body?.message || bodyText.slice(0, 300);
+  const error = new Error(`${PROVIDERS[safeProvider].label} request failed (${status}): ${detail}`);
+  error.status = status;
+  error.provider = safeProvider;
+  return error;
 }
 
 async function inlineImages(images) {

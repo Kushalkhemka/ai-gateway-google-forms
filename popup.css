@@ -27,4 +27,5 @@ button { font: inherit; }
 .note kbd { padding: 1px 3px; border: 1px solid #ccc; border-bottom-width: 2px; border-radius: 3px; color: #333; background: #fafafa; font: inherit; }
 footer { display: flex; justify-content: space-between; align-items: center; margin-top: 7px; padding: 0 2px; color: #888; font-size: 8px; }
 .link { padding: 0; border: 0; background: none; color: #111; cursor: pointer; font-weight: 700; }
+#model { max-width: 175px; overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 @keyframes spin { to { transform: rotate(360deg); } }

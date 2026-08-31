@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Gateway",
-  "version": "1.2.0",
+  "version": "1.3.1",
   "description": "Autofill MCQ quizzes and forms on the web with one multimodal AI request.",
   "icons": {
     "16": "icons/icon16.png",
