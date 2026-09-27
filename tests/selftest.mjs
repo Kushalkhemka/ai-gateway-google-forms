@@ -62,12 +62,12 @@ assert.match(clipboard, /clipboardEvents/);
 assert.match(clipboard, /isClipboardShortcut/);
 assert.match(clipboard, /user-select: text !important/);
 assert.doesNotMatch(clipboard, /pointer-events:\s*auto/);
-assert.ok(!allSource.join("\n").match(/(?:vck_|llmgtwy_|sk-or-v1-|nvapi-|AIza)[A-Za-z0-9_-]{20,}/), "An API key appears to be committed in source");
+assert.ok(!allSource.join("\n").match(/(?:vck_|llmgtwy_|sk-or-v1-|nvapi-|AIza)[A-Za-z0-9_-]{20,}|sk-[a-f0-9]{32}/i), "An API key appears to be committed in source");
 
 const providerSandbox = {};
 runInNewContext(providerSource, providerSandbox);
 const providers = providerSandbox.AIProviderConfig;
-assert.deepEqual(Array.from(Object.keys(providers.definitions)), ["vercel", "google", "openrouter", "nvidia"]);
+assert.deepEqual(Array.from(Object.keys(providers.definitions)), ["vercel", "google", "openrouter", "nvidia", "deepseek"]);
 
 const vercelModels = providers.normalizeVisionModels("vercel", {
   data: [
@@ -108,10 +108,21 @@ const nvidiaModels = providers.normalizeVisionModels("nvidia", {
 });
 assert.deepEqual(Array.from(nvidiaModels, (entry) => entry.id), ["meta/llama-3.2-11b-vision-instruct"]);
 
+const deepseekModels = providers.normalizeVisionModels("deepseek", {
+  data: [
+    { id: "deepseek-v4-pro", input_modalities: ["text"], output_modalities: ["text"] },
+    { id: "deepseek-flash", name: "DeepSeek-V4.1-Flash", input_modalities: ["text", "image"], output_modalities: ["text"], context_window: 1048576 }
+  ]
+});
+assert.deepEqual(Array.from(deepseekModels, (entry) => entry.id), ["deepseek-flash"]);
+assert.equal(deepseekModels[0].contextWindow, 1048576);
+
 const requestBody = { model: "example", messages: [] };
 assert.equal(providers.chatRequest("google", "test-key", requestBody).url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
 assert.equal(providers.chatRequest("openrouter", "test-key", requestBody).options.headers["HTTP-Referer"], "https://github.com/Kushalkhemka/ai-gateway-google-forms");
 assert.equal(providers.chatRequest("nvidia", "test-key", requestBody).url, "https://integrate.api.nvidia.com/v1/chat/completions");
+assert.equal(providers.chatRequest("deepseek", "test-key", requestBody).url, "https://api.deepseek.com/chat/completions");
+assert.equal(providers.provider("deepseek").defaultModel, "deepseek-flash");
 
 class FakeEventTarget {
   constructor() { this.listeners = new Map(); }

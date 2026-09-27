@@ -1,8 +1,8 @@
 {
   "name": "ai-gateway-google-forms",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
-  "description": "Multimodal form autofill with selectable Vercel, Google, OpenRouter, and NVIDIA providers",
+  "description": "Multimodal form autofill with selectable Vercel, Google, OpenRouter, NVIDIA, and DeepSeek providers",
   "scripts": {
     "test": "node tests/selftest.mjs"
   }

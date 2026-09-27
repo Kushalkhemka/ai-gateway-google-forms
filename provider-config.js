@@ -51,6 +51,19 @@
       modelsRequireKey: true,
       defaultModel: "meta/llama-3.2-11b-vision-instruct",
       strictJsonSchema: false
+    },
+    deepseek: {
+      id: "deepseek",
+      label: "DeepSeek",
+      shortLabel: "DeepSeek",
+      keyPlaceholder: "sk-…",
+      keyUrl: "https://platform.deepseek.com/api_keys",
+      description: "Direct access to DeepSeek Flash with image input and large-context reasoning.",
+      chatUrl: "https://api.deepseek.com/chat/completions",
+      modelsUrl: "https://api.deepseek.com/models",
+      modelsRequireKey: true,
+      defaultModel: "deepseek-flash",
+      strictJsonSchema: false
     }
   };
 
@@ -72,10 +85,14 @@
       { id: "meta/llama-3.2-11b-vision-instruct", name: "Llama 3.2 11B Vision Instruct", vision: true, free: true },
       { id: "qwen/qwen3.5-122b-a10b", name: "Qwen 3.5 122B A10B", vision: true, free: true },
       { id: "nvidia/cosmos3-nano-reasoner", name: "Cosmos 3 Nano Reasoner", vision: true, free: true }
+    ],
+    deepseek: [
+      { id: "deepseek-flash", name: "DeepSeek V4.1 Flash", vision: true, contextWindow: 1048576 }
     ]
   };
 
   const nvidiaVisionIds = new Set(fallbackModels.nvidia.map((model) => model.id));
+  const deepseekVisionIds = new Set(fallbackModels.deepseek.map((model) => model.id));
 
   function provider(providerId) {
     return definitions[providerId] || definitions.vercel;
@@ -154,6 +171,7 @@
       let vision = hasVisionInput(row);
       if (providerId === "google") vision = isGoogleVisionModel(row);
       if (providerId === "nvidia") vision = vision || nvidiaVisionIds.has(id);
+      if (providerId === "deepseek") vision = vision || deepseekVisionIds.has(id);
       if (!vision || !hasTextOutput(row)) continue;
       if (providerId === "vercel" && row.type && row.type !== "language") continue;
       const name = String(row.displayName || row.name || id).replace(/^models\//, "");

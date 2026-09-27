@@ -6,7 +6,7 @@
   <p>
     <img alt="Manifest V3" src="https://img.shields.io/badge/Manifest-V3-111111?style=flat-square&amp;logo=googlechrome&amp;logoColor=white" />
     <img alt="JavaScript" src="https://img.shields.io/badge/JavaScript-Vanilla-111111?style=flat-square&amp;logo=javascript&amp;logoColor=white" />
-    <img alt="Four AI providers" src="https://img.shields.io/badge/AI%20Providers-4-111111?style=flat-square&amp;logoColor=white" />
+    <img alt="Five AI providers" src="https://img.shields.io/badge/AI%20Providers-5-111111?style=flat-square&amp;logoColor=white" />
     <img alt="NPTEL" src="https://img.shields.io/badge/Platform-NPTEL-111111?style=flat-square&amp;logoColor=white" />
     <img alt="Vision models" src="https://img.shields.io/badge/Models-Vision%20only-111111?style=flat-square&amp;logo=google&amp;logoColor=white" />
   </p>
@@ -21,7 +21,7 @@ Most assessment assistants process one field at a time and lose the context conn
 - **Whole-form reasoning** — every supported question is included in a single prompt.
 - **Works across the web** — detects ordinary native and ARIA-based quiz controls on HTTP and HTTPS pages.
 - **Real vision input** — images are downloaded and embedded as inline base64 payloads, so providers never need to crawl Google-hosted URLs.
-- **Provider choice** — use Vercel AI Gateway, Google AI Studio, OpenRouter, or NVIDIA NIM with separate locally stored keys.
+- **Provider choice** — use Vercel AI Gateway, Google AI Studio, OpenRouter, NVIDIA NIM, or DeepSeek with separate locally stored keys.
 - **Vision-only model selector** — live provider catalogs are filtered for image input and text output, with a conservative verified fallback list.
 - **Exact option matching** — radio, checkbox, dropdown, and grid responses must match labels present in the form.
 - **Humanized writing** — subjective responses are concise, natural, and configurable.
@@ -75,10 +75,12 @@ flowchart LR
     E --> F2[Google AI Studio]
     E --> F3[OpenRouter]
     E --> F4[NVIDIA NIM]
+    E --> F5[DeepSeek]
     F1 --> G[JSON answer plan]
     F2 --> G
     F3 --> G
     F4 --> G
+    F5 --> G
     G --> H[ID validation]
     H --> I[Native DOM events]
     I --> J[Review filled form]
@@ -126,7 +128,7 @@ Settings are stored in `chrome.storage.local` and are never committed to the rep
 
 | Setting | Default | Notes |
 |---|---|---|
-| Provider | Vercel AI Gateway | Also supports Google AI Studio, OpenRouter, and NVIDIA NIM |
+| Provider | Vercel AI Gateway | Also supports Google AI Studio, OpenRouter, NVIDIA NIM, and DeepSeek |
 | Model | `google/gemini-3.7-flash` | Selector contains only verified image-input/text-output models |
 | Maximum images | `20` | Configurable from 10–30 |
 | Answer style | Natural student response | Customize tone and answer depth |
@@ -150,7 +152,7 @@ No assessment URL or externally hosted image URL is sent for the model provider 
 
 - Provider API keys stay in local Chrome extension storage and are never committed to this repository.
 - Form content leaves the browser only when you explicitly invoke autofill.
-- Requests go directly to the provider selected in Settings. Vercel AI Gateway can automatically route between upstream providers; the three direct options do not.
+- Requests go directly to the provider selected in Settings. Vercel AI Gateway can automatically route between upstream providers; the four direct options do not.
 - The extension does not collect analytics, run a backend, or auto-submit forms.
 - Form text is treated as untrusted content and cannot change the response contract or request secrets.
 - General website support requires Chrome's **read and change data on all websites** permission so the content script can inspect quiz controls and retrieve cross-origin question images. It performs no extraction or AI request until you explicitly invoke Autofill.
